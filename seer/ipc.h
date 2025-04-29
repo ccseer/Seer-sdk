@@ -8,7 +8,7 @@ enum SeerCommand : int {
     // Respond with the file path (send back to Seer)
     SEER_RESPONSE_PATH = 4001,
 
-    // Request a preview
+    // Request a preview：
     // Note: The minimum interval between SEER_INVOKE_* commands should be 200ms
     SEER_INVOKE_W32 = 5000,
     // Preview in a separate window
@@ -17,9 +17,16 @@ enum SeerCommand : int {
     // Seer can have multiple windows(main + separated) at the same time
     // Check if the main window is currently visible
     SEER_IS_VISIBLE = 5004,
-
     // Hide the main window if it is currently visible
     SEER_HIDE = 5005,
+
+    // Request the currently previewed file
+    SEER_GET_CURRENT_FILE = 5006,
+    // Request the current Seer version
+    // 4.0.1 => 40001
+    SEER_GET_VERSION = 5007,
+    // Query whether tracking mode is enabled
+    SEER_IS_TRACKING_ENABLED = 5008,
 };
 
 // SEER_IS_VISIBLE
