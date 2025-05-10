@@ -6,7 +6,7 @@
 
 #include "ipc.h"
 
-namespace seer_ipc {
+namespace seer {
 inline HWND findSeerWindow()
 {
     return FindWindowW(SEER_CLASS_NAME, nullptr);
@@ -116,4 +116,4 @@ inline void hideMainWindow(HWND seer_hwnd)
     sendSimpleCommand(seer_hwnd, SEER_HIDE);
 }
 
-}  // namespace seer_ipc
+}  // namespace seer
