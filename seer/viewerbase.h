@@ -82,12 +82,11 @@ inline ViewerBase::ViewerBase(QWidget* parent)
 inline void ViewerBase::load(QHBoxLayout* layout_control_bar,
                              std::unique_ptr<ViewOptions>&& ctx)
 {
-    emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loading);
-
     m_impl->elapsed = std::chrono::high_resolution_clock::now();
     m_d             = std::move(ctx);
     qDebug() << "[wnd] [timer] started:" << this << m_d->d->is_main_wnd
              << m_d->d->dpr;
 
+    emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loading);
     loadImpl(m_impl->layout, layout_control_bar);
 }
