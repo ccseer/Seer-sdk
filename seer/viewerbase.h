@@ -27,6 +27,11 @@ public:
 
     Q_SIGNAL void sigCommand(int view_command_type, const QVariant& data = {});
 
+    QString getPath() const
+    {
+        return m_d ? m_d->d->path : QString();
+    }
+
 protected:
     virtual void loadImpl(QBoxLayout* layout_content,
                           QHBoxLayout* layout_control_bar)

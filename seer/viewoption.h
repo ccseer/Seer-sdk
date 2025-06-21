@@ -32,7 +32,7 @@ struct ViewOptionsData {
 class ViewOptions {
 public:
     ViewOptions() : d(std::make_unique<ViewOptionsData>()) {}
-    virtual ~ViewOptions() {};
+    virtual ~ViewOptions() {}
 
     std::unique_ptr<ViewOptionsData> d;
 };
