@@ -5,7 +5,6 @@
 
 // viewer->property(g_property_*)
 inline constexpr auto g_property_key_plugin_mi  = "plugin_meta";
-inline constexpr auto g_property_key_plugin_ver = "plugin_version";
 
 struct ViewOptionsData {
     ViewOptionsData() : theme(-1), dpr(0.1), is_main_wnd(true), wnd_index(0) {}
