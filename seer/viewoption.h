@@ -3,8 +3,9 @@
 #include <QSize>
 #include <QString>
 
-// viewer->property(g_property_*)
-inline constexpr auto g_property_key_plugin_mi  = "plugin_meta";
+/// viewer: property(g_property_*)
+// arguments from settings, QStringList
+inline constexpr auto g_property_key_cmd = "plugin_cmd";
 
 struct ViewOptionsData {
     ViewOptionsData() : theme(-1), dpr(0.1), is_main_wnd(true), wnd_index(0) {}

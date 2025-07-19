@@ -14,8 +14,7 @@ public:
     void load(QHBoxLayout* layout_control_bar,
               std::unique_ptr<ViewOptions>&& ctx);
 
-    virtual ViewerBase* createViewer(QWidget* parent = nullptr) = 0;
-    virtual QString name() const                                = 0;
+    virtual QString name() const = 0;
     // preferred size
     // if it's image type, its size = 80000x80000, then return the val
     virtual QSize getContentSize() const = 0;
@@ -55,10 +54,6 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-#define ViewerBase_iid "seer.plugin.interface.preview/1.1"
-Q_DECLARE_INTERFACE(ViewerBase, ViewerBase_iid)
-
-///////////////////////////////////////////////
 inline ViewerBase::ViewerBase(QWidget* parent)
     : QWidget(parent), m_impl(std::make_unique<Impl>())
 {
@@ -92,3 +87,13 @@ inline void ViewerBase::load(QHBoxLayout* layout_control_bar,
 
     loadImpl(m_impl->layout, layout_control_bar);
 }
+
+//////////////////////////////////////////////////////////////////
+class ViewerFactoryInterface {
+public:
+    virtual ~ViewerFactoryInterface();
+    virtual ViewerBase* createViewer(QWidget* parent = nullptr) = 0;
+};
+
+#define ViewerFactoryInterface_iid "seer.plugin.interface.preview/1.1"
+Q_DECLARE_INTERFACE(ViewerFactoryInterface, ViewerFactoryInterface_iid)
