@@ -89,11 +89,11 @@ inline void ViewerBase::load(QHBoxLayout* layout_control_bar,
 }
 
 //////////////////////////////////////////////////////////////////
-class ViewerFactoryInterface {
+class ViewerPluginInterface {
 public:
-    virtual ~ViewerFactoryInterface();
+    virtual ~ViewerPluginInterface()                            = default;
     virtual ViewerBase* createViewer(QWidget* parent = nullptr) = 0;
 };
 
-#define ViewerFactoryInterface_iid "seer.plugin.interface.preview/1.1"
-Q_DECLARE_INTERFACE(ViewerFactoryInterface, ViewerFactoryInterface_iid)
+#define ViewerPluginInterface_iid "seer.plugin.interface.preview/1.1"
+Q_DECLARE_INTERFACE(ViewerPluginInterface, ViewerPluginInterface_iid)
