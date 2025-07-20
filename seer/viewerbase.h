@@ -95,5 +95,5 @@ public:
     virtual ViewerBase* createViewer(QWidget* parent = nullptr) = 0;
 };
 
-#define ViewerPluginInterface_iid "seer.plugin.interface.preview/1.1"
+#define ViewerPluginInterface_iid "seer.plugin.interface.preview/2"
 Q_DECLARE_INTERFACE(ViewerPluginInterface, ViewerPluginInterface_iid)
