@@ -7,6 +7,8 @@
 // arguments from settings, QStringList
 inline constexpr auto g_property_key_cmd = "plugin_cmd";
 
+//TODO: 1. hide the details
+//      2. add QMap<QString, QVariant> to replace size_max_viewer/size_min_viewer
 struct ViewOptionsData {
     ViewOptionsData() : theme(-1), dpr(0.1), is_main_wnd(true), wnd_index(0) {}
 
