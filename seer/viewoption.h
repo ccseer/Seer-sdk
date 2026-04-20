@@ -1,48 +1,10 @@
 #pragma once
+#define SEER_VIEWOPTION_H
 
 #include <QSize>
 #include <QString>
-
-/// viewer: property(g_property_*)
-// arguments from settings, QStringList
-inline constexpr auto g_property_key_cmd = "plugin_cmd";
-
-//TODO: 1. hide the details
-//      2. add QMap<QString, QVariant> to replace size_max_viewer/size_min_viewer
-struct ViewOptionsData {
-    ViewOptionsData() : theme(-1), dpr(0.1), is_main_wnd(true), wnd_index(0) {}
-
-    // viewer name
-    QString type;
-    // absolute file path
-    QString path;
-    // lower case.
-    // When the file has no suffix, the suffix might be detected rather than
-    // taken from the path.
-    QString suffix;
-
-    QSize size_max_viewer;
-    QSize size_min_viewer;
-
-    // 1: dark, 0: light
-    int theme;
-    // scale factor
-    qreal dpr;
-
-    // main wnd has a different title bar
-    bool is_main_wnd;
-    // wnd_index == 0 => main wnd
-    ushort wnd_index;
-};
-
-class ViewOptions {
-public:
-    ViewOptions() : d(std::make_unique<ViewOptionsData>()) {}
-    virtual ~ViewOptions() = default;
-
-    std::unique_ptr<ViewOptionsData> d;
-};
-using ViewOptionsPtr = std::unique_ptr<ViewOptions>;
+#include <QStringList>
+#include <QVariant>
 
 enum ViewCommandType : int {
     VCT_StateChange = 0,        // ViewCommandValue_StateChange
@@ -75,4 +37,81 @@ enum ViewCommandValue_StateChange : uchar {
     VCV_Loading,
     VCV_Loaded,
     VCV_Error
+};
+
+// g_property_key_cmd is used by DLL plugins to pass command-line args
+inline constexpr auto g_property_key_cmd = "plugin_cmd";
+
+// Extension field keys (public - for PathResolver, plugins)
+inline constexpr const char* VO_KEY_ARCHIVE_PATH  = "archive_path";
+inline constexpr const char* VO_KEY_INNER_PATH    = "inner_path";
+inline constexpr const char* VO_KEY_RESOLVED_PATH = "resolved_path";
+
+// Forward declaration
+class ViewOptionsPrivate;
+
+/**
+ * ViewOptions v3 - ABI-stable viewer configuration
+ *
+ * Lifecycle:
+ * - Created by Seer via create() factory
+ * - Borrowed by plugins (const ViewOptions*)
+ * - Destroyed by Seer via destroy()
+ *
+ * ABI Guarantee:
+ * - sizeof(ViewOptions) = 8 bytes (one pointer)
+ * - All methods are non-inline (in .cpp)
+ * - Future fields added to ViewOptionsPrivate only
+ *
+ * Compiler Requirements:
+ * - MSVC: /MD (Multi-threaded DLL) runtime
+ * - DO NOT USE: /MT or /MTd (static linking)
+ */
+class ViewOptions {
+public:
+    // Static factory methods (force Seer CRT allocation)
+    static ViewOptions* create();
+    static ViewOptions* createFrom(const ViewOptions* parent);
+
+    // Destruction (Seer CRT deallocation)
+    void destroy();
+
+    // Core field accessors (typed, high-performance)
+    QString path() const;
+    void setPath(const QString& path);
+
+    QString suffix() const;
+    void setSuffix(const QString& suffix);
+
+    QString viewerType() const;
+    void setViewerType(const QString& type);
+
+    int theme() const;
+    void setTheme(int theme);
+
+    qreal dpr() const;
+    void setDpr(qreal dpr);
+
+    QSize maxSize() const;
+    void setMaxSize(const QSize& size);
+
+    QSize minSize() const;
+    void setMinSize(const QSize& size);
+
+    // Extension field accessors (Property Bag)
+    QVariant property(const QString& key,
+                      const QVariant& defaultValue = {}) const;
+    void setProperty(const QString& key, const QVariant& value);
+    bool hasProperty(const QString& key) const;
+    void removeProperty(const QString& key);
+    QStringList propertyKeys() const;
+
+private:
+    ViewOptions();   // Private - force factory usage
+    ~ViewOptions();  // Private - force destroy() usage
+
+    ViewOptions(const ViewOptions&)            = delete;
+    ViewOptions& operator=(const ViewOptions&) = delete;
+
+    ViewOptionsPrivate* d_ptr;  // Raw pointer, 8 bytes
 };

@@ -5,90 +5,61 @@
 
 #include "viewoption.h"
 
+class ViewerBasePrivate;
+
+/**
+ * ViewerBase v3 - ABI-stable base class for viewers
+ *
+ * Key changes from v2:
+ * - Borrowing semantics: const ViewOptions* (not unique_ptr&&)
+ * - D-Pointer for ABI stability
+ * - destroy() method for safe cross-DLL cleanup
+ *
+ * Lifecycle:
+ * - Created by plugin via createViewer()
+ * - Loaded by Seer with borrowed ViewOptions*
+ * - Destroyed by Seer via destroy()
+ */
 class ViewerBase : public QWidget {
     Q_OBJECT
 public:
     explicit ViewerBase(QWidget* parent = nullptr);
-    ~ViewerBase() override = default;
 
-    void load(QHBoxLayout* layout_control_bar,
-              std::unique_ptr<ViewOptions>&& ctx);
+    // Borrowing load interface
+    void load(QHBoxLayout* layout_control_bar, const ViewOptions* ctx);
 
-    virtual QString name() const = 0;
-    // preferred size
-    // if it's image type, its size = 80000x80000, then return the val
+    virtual QString name() const         = 0;
     virtual QSize getContentSize() const = 0;
 
     virtual void loadFileInfo() {}
     virtual void onCopyTriggered() {}
-
     virtual void updateDPR(qreal /*dpr*/) {}
     virtual void updateTheme(int /*theme*/) {}
+
+    // Safe destruction across DLL boundary
+    virtual void destroy() = 0;
 
     Q_SIGNAL void sigCommand(int view_command_type, const QVariant& data = {});
 
 protected:
+    virtual ~ViewerBase();  // Protected - use destroy()
+
     virtual void loadImpl(QBoxLayout* layout_content,
-                          QHBoxLayout* layout_control_bar)
-        = 0;
-    std::unique_ptr<ViewOptions> m_d;
+                          QHBoxLayout* layout_control_bar) = 0;
+
+    // Access borrowed ViewOptions
+    const ViewOptions* options() const;
 
 private:
-    class Impl {
-    public:
-        std::chrono::high_resolution_clock::time_point elapsed;
-        QVBoxLayout* layout;
-
-        Impl() : layout(new QVBoxLayout()) {}
-        ~Impl()
-        {
-            delete layout;
-        }
-    };
-
-    std::unique_ptr<Impl> m_impl;
+    ViewerBasePrivate* d_ptr;  // Raw pointer for ABI stability
 };
 
-inline ViewerBase::ViewerBase(QWidget* parent)
-    : QWidget(parent), m_impl(std::make_unique<Impl>())
-{
-    this->setLayout(m_impl->layout);
-    m_impl->layout->setSpacing(0);
-    m_impl->layout->setContentsMargins(0, 0, 0, 0);
-    connect(this, &ViewerBase::sigCommand, this, [this](auto t, const auto& v) {
-        if (t != ViewCommandType::VCT_StateChange) {
-            return;
-        }
-        if (v.toInt() != VCV_Loaded) {
-            return;
-        }
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            end_time - m_impl->elapsed);
-        qDebug() << "[wnd] [timer] elapsed:" << this << duration.count()
-                 << "ms";
-    });
-}
-
-inline void ViewerBase::load(QHBoxLayout* layout_control_bar,
-                             std::unique_ptr<ViewOptions>&& ctx)
-{
-    emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loading);
-
-    m_impl->elapsed = std::chrono::high_resolution_clock::now();
-    m_d             = std::move(ctx);
-    qDebug() << "[wnd] [timer] started:" << this << m_d->d->is_main_wnd
-             << m_d->d->dpr;
-
-    loadImpl(m_impl->layout, layout_control_bar);
-}
-
-//////////////////////////////////////////////////////////////////
+// Plugin interface v3
 class ViewerPluginInterface {
 public:
     virtual ~ViewerPluginInterface()                            = default;
     virtual ViewerBase* createViewer(QWidget* parent = nullptr) = 0;
 };
 
-#define ViewerPluginInterface_iid "seer.plugin.interface.preview/2"
+#define ViewerPluginInterface_iid "seer.plugin.interface.preview/3"
 Q_DECLARE_INTERFACE(ViewerPluginInterface, ViewerPluginInterface_iid)
