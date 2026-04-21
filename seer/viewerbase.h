@@ -90,7 +90,6 @@ private:
     ViewerBasePrivate *d_ptr;
 };
 
-// Plugin interface v3
 class ViewerPluginInterface {
 public:
     virtual ~ViewerPluginInterface()                            = default;

@@ -38,6 +38,16 @@ enum ViewCommandValue_StateChange : uchar {
     VCV_Error
 };
 
+namespace ViewOptionsKeys {
+// property(ViewOptionsInternal::kKeyIsMainWnd).toBool();
+inline constexpr const char *kKeyIsMainWnd     = "is_main_wnd";
+inline constexpr const char *kKeyWndIndex      = "wnd_index";
+inline constexpr const char *kKeySizeMax       = "size_max_viewer";
+inline constexpr const char *kKeySizeMin       = "size_min_viewer";
+inline constexpr const char *kKeyPluginMeta    = "plugin_meta";
+inline constexpr const char *kKeyPluginVersion = "plugin_version";
+}  // namespace ViewOptionsKeys
+
 // Private implementation (inline, header-only)
 class ViewOptionsPrivate {
 public:
@@ -112,27 +122,23 @@ public:
     }
 
     // Extension field accessors (Property Bag)
-    QVariant property(const QString &key,
+    QVariant property(const QString &key,  // ViewOptionsKeys
                       const QVariant &defaultValue = {}) const
     {
         return d_ptr->extras.value(key, defaultValue);
     }
-
     void setProperty(const QString &key, const QVariant &value)
     {
         d_ptr->extras[key] = value;
     }
-
     bool hasProperty(const QString &key) const
     {
         return d_ptr->extras.contains(key);
     }
-
     void removeProperty(const QString &key)
     {
         d_ptr->extras.remove(key);
     }
-
     QStringList propertyKeys() const
     {
         return d_ptr->extras.keys();
