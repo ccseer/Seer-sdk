@@ -46,6 +46,7 @@ inline constexpr const char *kKeySizeMax       = "size_max_viewer";
 inline constexpr const char *kKeySizeMin       = "size_min_viewer";
 inline constexpr const char *kKeyPluginMeta    = "plugin_meta";
 inline constexpr const char *kKeyPluginVersion = "plugin_version";
+inline constexpr const char *kKeyPluginCmd     = "plugin_cmd";
 }  // namespace ViewOptionsKeys
 
 // Private implementation (inline, header-only)
