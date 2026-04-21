@@ -13,7 +13,7 @@ namespace seer {
 inline QString getDLLPath()
 {
     MEMORY_BASIC_INFORMATION mbi = {};
-    VirtualQuery((void*)getDLLPath, &mbi, sizeof(mbi));
+    VirtualQuery((void *)getDLLPath, &mbi, sizeof(mbi));
     HMODULE hm = (HMODULE)mbi.AllocationBase;
 
     QString dir;
@@ -28,7 +28,7 @@ inline QString getDLLPath()
     return dir;
 }
 
-inline QSize parseViewerSizeFromConfig(const QStringList& args_raw)
+inline QSize parseViewerSizeFromConfig(const QStringList &args_raw)
 {
     if (args_raw.isEmpty()) {
         return {};
@@ -54,7 +54,7 @@ inline QSize parseViewerSizeFromConfig(const QStringList& args_raw)
     bool cvt_p = false;
     int pct    = parser.value(opt_p).toInt(&cvt_p);
     if (cvt_p && pct > 0 && pct <= 100) {
-        if (QScreen* scn = QGuiApplication::primaryScreen()) {
+        if (QScreen *scn = QGuiApplication::primaryScreen()) {
             return scn->availableSize() * pct / 100;
         }
     }
