@@ -1,6 +1,9 @@
 #pragma once
 
+#include <QString>
+#include <QStringList>
 #include <QVariant>
+#include <QVariantHash>
 
 enum ViewCommandType : int {
     VCT_StateChange = 0,        // ViewCommandValue_StateChange
@@ -35,36 +38,105 @@ enum ViewCommandValue_StateChange : uchar {
     VCV_Error
 };
 
-// Forward declaration
-class ViewOptionsPrivate;
+// Private implementation (inline, header-only)
+class ViewOptionsPrivate {
+public:
+    ViewOptionsPrivate() = default;
+
+    ViewOptionsPrivate(const ViewOptionsPrivate &other)
+        : path(other.path),
+          suffix(other.suffix),
+          viewer_type(other.viewer_type),
+          theme(other.theme),
+          dpr(other.dpr),
+          extras(other.extras)
+    {
+    }
+
+    QString path;
+    QString suffix;
+    QString viewer_type;
+    int theme = -1;
+    qreal dpr = 1.0;
+    QVariantHash extras;
+};
 
 class ViewOptions {
 public:
     ViewOptions() = default;
 
-    // Core field accessors (typed, high-performance)
-    QString path() const;
-    void setPath(const QString &path);
+    // Core field accessors
+    QString path() const
+    {
+        return d_ptr->path;
+    }
+    void setPath(const QString &path)
+    {
+        d_ptr->path = path;
+    }
 
-    QString suffix() const;
-    void setSuffix(const QString &suffix);
+    QString suffix() const
+    {
+        return d_ptr->suffix;
+    }
+    void setSuffix(const QString &suffix)
+    {
+        d_ptr->suffix = suffix;
+    }
 
-    QString viewerType() const;
-    void setViewerType(const QString &type);
+    QString viewerType() const
+    {
+        return d_ptr->viewer_type;
+    }
+    void setViewerType(const QString &type)
+    {
+        d_ptr->viewer_type = type;
+    }
 
-    int theme() const;
-    void setTheme(int theme);
+    int theme() const
+    {
+        return d_ptr->theme;
+    }
+    void setTheme(int theme)
+    {
+        d_ptr->theme = theme;
+    }
 
-    qreal dpr() const;
-    void setDpr(qreal dpr);
+    qreal dpr() const
+    {
+        return d_ptr->dpr;
+    }
+    void setDpr(qreal dpr)
+    {
+        d_ptr->dpr = dpr;
+    }
 
     // Extension field accessors (Property Bag)
     QVariant property(const QString &key,
-                      const QVariant &defaultValue = {}) const;
-    void setProperty(const QString &key, const QVariant &value);
-    bool hasProperty(const QString &key) const;
-    void removeProperty(const QString &key);
-    QStringList propertyKeys() const;
+                      const QVariant &defaultValue = {}) const
+    {
+        return d_ptr->extras.value(key, defaultValue);
+    }
 
-    ViewOptionsPrivate *d_ptr = nullptr;  // Raw pointer, 8 bytes
+    void setProperty(const QString &key, const QVariant &value)
+    {
+        d_ptr->extras[key] = value;
+    }
+
+    bool hasProperty(const QString &key) const
+    {
+        return d_ptr->extras.contains(key);
+    }
+
+    void removeProperty(const QString &key)
+    {
+        d_ptr->extras.remove(key);
+    }
+
+    QStringList propertyKeys() const
+    {
+        return d_ptr->extras.keys();
+    }
+
+    ViewOptionsPrivate *d_ptr = nullptr;
 };
