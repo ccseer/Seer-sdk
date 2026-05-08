@@ -27,6 +27,12 @@ enum ViewCommandType : int {
 
     VCT_LoadSeparated,  // const QString& path
 
+    // QVariantMap{
+    //  {"viewer": target viewer name},
+    //  {"context": QVariantMap data passed to the target viewer}
+    // }
+    VCT_LoadViewerWithContext,
+
     // --------------------
     VCT_Reserved_Max = 999
 };
@@ -47,6 +53,7 @@ inline constexpr const char *kKeySizeMin       = "size_min_viewer";
 inline constexpr const char *kKeyPluginMeta    = "plugin_meta";
 inline constexpr const char *kKeyPluginVersion = "plugin_version";
 inline constexpr const char *kKeyPluginCmd     = "plugin_cmd";
+inline constexpr const char *kKeyViewerContext = "viewer_context";
 }  // namespace ViewOptionsKeys
 
 // Private implementation (inline, header-only)
