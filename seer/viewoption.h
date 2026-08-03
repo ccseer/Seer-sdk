@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QSize>
 #include <QVariant>
 #include <QVariantHash>
 
@@ -54,6 +55,7 @@ inline constexpr const char *kKeyPluginMeta    = "plugin_meta";
 inline constexpr const char *kKeyPluginVersion = "plugin_version";
 inline constexpr const char *kKeyPluginCmd     = "plugin_cmd";
 inline constexpr const char *kKeyViewerContext = "viewer_context";
+// Initial content-area size selected by the host for a Custom preview policy.
 }  // namespace ViewOptionsKeys
 
 // Private implementation (inline, header-only)
