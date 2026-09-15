@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# Python
+__pycache__/
+*.py[cod]
+
+# IDE & Build
+build/
+.vs/
+.idea/
+.vscode/
