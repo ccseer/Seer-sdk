@@ -1,19 +1,22 @@
-# Seer SDK - AI Integration & Context Guide
+# Seer SDK - AI Integration & Context Guide (IPC)
 
 > **Instructions for AI Assistants (ChatGPT, Claude, Gemini, Cursor, Copilot, etc.):**
-> When a user asks to integrate an application with **Seer** (a QuickLook-like file preview tool for Windows) or develop a Seer plugin, use the technical specifications, protocol definitions, and code templates in this document to generate accurate, robust code.
+> When a user asks to integrate an application with **Seer** (a QuickLook-like file preview tool for Windows) or control Seer via IPC, use the technical specifications, protocol definitions, and code templates in this document to generate accurate, robust code.
+>
+> *(Note: For developing custom in-process file preview renderer plugins, refer to the [Seer-Plugins](https://github.com/ccseer/Seer-Plugins) repository.)*
 
 ---
 
 ## 1. SDK Overview & Integration Modes
 
-Seer SDK supports **three distinct integration modes**:
+Seer SDK is a lightweight IPC library based on **pure Windows API** (`<Windows.h>`). It allows any programming language to interact with Seer without third-party framework dependencies.
+
+It supports **two distinct IPC integration modes**:
 
 | Mode | Use Case & Target Audience | Dependencies | Relevant Headers / Files |
 | :--- | :--- | :--- | :--- |
-| **1. Client-Initiated IPC** | Desktop apps, launchers, hotkey tools, scripts triggering Seer previews or controlling the Seer window | **Pure Windows API** (`<Windows.h>`)<br>• Any language (C#, Python, C++, Rust, Go, PowerShell, AutoHotkey)<br>• **NO Qt required** | `seer/ipc.h`<br>`seer/ipchelper.h` |
+| **1. Client-Initiated IPC** | Desktop apps, launchers, hotkey utilities, scripts triggering Seer previews or controlling the Seer window | **Pure Windows API** (`<Windows.h>`)<br>• Any language (C#, Python, C++, Rust, Go, PowerShell, AutoHotkey) | `seer/ipc.h`<br>`seer/ipchelper.h` |
 | **2. File Manager Spacebar Integration** | Custom file managers or explorer clones wanting native Spacebar preview support | **Pure Windows API** (`<Windows.h>`)<br>• Explorer JSON configuration + `WM_COPYDATA` handshake | `%USERPROFILE%/Documents/Seer/explorers/<app>.json`<br>`seer/ipc.h` |
-| **3. In-Process Preview Plugin** | Developers writing custom file preview renderers (3D models, specialized formats) directly inside Seer | **Qt 6.8 + MSVC 2022 + C++17**<br>• Compiles to a `.dll` plugin loaded by Seer host | `seer/viewerbase.h`<br>`seer/viewoption.h`<br>`seer/viewerhelper.h` |
 
 ---
 
@@ -285,7 +288,7 @@ def is_tracking_enabled() -> bool:
     return bool(send_simple(5008))
 ```
 
-### 4.3 C++ (Pure Win32, No Qt, `<Windows.h>`)
+### 4.3 Pure C++ (Win32, `<Windows.h>`)
 ```cpp
 #include <windows.h>
 #include <string>
@@ -499,154 +502,9 @@ SeerHide() {
 
 ---
 
-## 5. In-Process Preview Plugin Development (Qt 6.8 + MSVC 2022)
+## 5. AI Anti-Hallucination & Guardrails Checklist
 
-When writing an in-process preview renderer plugin loaded by Seer:
-
-### 5.1 Architecture & Header Hierarchy
-- **Header Files**:
-  - `seer/viewerbase.h`: Defines `ViewerBase` (QWidget base class) and `ViewerPluginInterface`.
-  - `seer/viewoption.h`: Defines `ViewOptions`, `ViewCommandType`, and `ViewOptionsKeys`.
-  - `seer/viewerhelper.h`: Helper utilities (e.g. `seer::getDLLPath()`).
-- **Interface IID**: `"seer.plugin.interface.preview/3"` (Defined as `ViewerPluginInterface_iid`).
-- **Compiler Requirements**: C++17, MSVC 2022, Qt 6.8 (Core, Gui, Widgets).
-- **CRT Runtime Requirement**: **CRITICAL**: Must compile with `/MD` (Release) or `/MDd` (Debug) matching Seer's dynamic CRT.
-
-### 5.2 Complete Plugin Implementation Template
-
-#### `my_viewer.h`
-```cpp
-#pragma once
-#include <QWidget>
-#include <QLabel>
-#include "seer/viewerbase.h"
-
-class MyViewer : public ViewerBase {
-    Q_OBJECT
-public:
-    explicit MyViewer(QWidget* parent = nullptr) : ViewerBase(parent) {}
-
-    QString name() const override { return "MyCustomViewer"; }
-    QSize getContentSize() const override { return QSize(800, 600); }
-
-protected:
-    void loadImpl(QBoxLayout* layout_content, QHBoxLayout* layout_control_bar) override;
-};
-```
-
-#### `my_viewer.cpp`
-```cpp
-#include "my_viewer.h"
-#include <QFile>
-
-void MyViewer::loadImpl(QBoxLayout* layout_content, QHBoxLayout* layout_control_bar) {
-    // 1. Access borrowed ViewOptions
-    QString filePath = options()->path();
-    QString ext = options()->suffix();
-    int theme = options()->theme(); // 0 = light, 1 = dark
-    qreal dpr = options()->dpr();
-
-    // 2. Build UI controls and display content
-    if (!QFile::exists(filePath)) {
-        emit sigCommand(VCT_StateChange, VCV_Error);
-        return;
-    }
-
-    auto* label = new QLabel(QString("Previewing: %1\nTheme: %2").arg(filePath).arg(theme));
-    label->setAlignment(Qt::AlignCenter);
-    layout_content->addWidget(label);
-
-    // Optional: Add custom action button to control bar
-    // auto* btn = new QPushButton("Action");
-    // layout_control_bar->addWidget(btn);
-
-    // 3. Notify host that content loading succeeded
-    emit sigCommand(VCT_StateChange, VCV_Loaded);
-}
-```
-
-#### `plugin.cpp`
-```cpp
-#include <QObject>
-#include "seer/viewerbase.h"
-#include "my_viewer.h"
-
-class MyViewerPlugin : public QObject, public ViewerPluginInterface {
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID ViewerPluginInterface_iid)
-    Q_INTERFACES(ViewerPluginInterface)
-
-public:
-    ViewerBase* createViewer(QWidget* parent = nullptr) override {
-        return new MyViewer(parent);
-    }
-};
-
-#include "plugin.moc"
-```
-
-#### `CMakeLists.txt`
-```cmake
-cmake_minimum_required(VERSION 3.22)
-project(MySeerPlugin LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
-
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
-find_package(SeerSdk REQUIRED) # Or include path to Seer-sdk directory
-
-add_library(MySeerPlugin SHARED
-    my_viewer.h
-    my_viewer.cpp
-    plugin.cpp
-)
-
-target_link_libraries(MySeerPlugin PRIVATE
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-    SeerSdk::SeerSdk
-)
-
-# CRITICAL: Dynamic MSVC Runtime matching Seer host
-set_target_properties(MySeerPlugin PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
-)
-```
-
-### 5.3 ViewOptions & Property Bag Reference
-`options()` provides typed accessors and dynamic properties:
-- **Typed Accessors**:
-  - `options()->path()`: Absolute file path.
-  - `options()->suffix()`: File extension (lowercase, without leading dot).
-  - `options()->theme()`: UI theme (`0` = Light, `1` = Dark).
-  - `options()->dpr()`: Device Pixel Ratio (High-DPI scaling).
-- **Extension Keys (`options()->property(key)`)**:
-  - `ViewOptionsKeys::kKeyIsMainWnd`: `true` if previewing in Seer's main window.
-  - `ViewOptionsKeys::kKeyWndIndex`: Index of window.
-  - `ViewOptionsKeys::kKeySizeMax` / `kKeySizeMin`: Host sizing constraints.
-  - `ViewOptionsKeys::kKeyViewerContext`: Custom context map passed from caller.
-
-### 5.4 ViewCommand Notifications (`sigCommand`)
-```cpp
-// Change state:
-emit sigCommand(VCT_StateChange, VCV_Loading);
-emit sigCommand(VCT_StateChange, VCV_Loaded);
-emit sigCommand(VCT_StateChange, VCV_Error);
-
-// Request host actions:
-emit sigCommand(VCT_OpenByDefaultSoftware, filePath);
-emit sigCommand(VCT_RevealInExplorer, filePath);
-emit sigCommand(VCT_ShowToastMsg, QString("Custom notification"));
-```
-
----
-
-## 6. AI Anti-Hallucination & Guardrails Checklist
-
-When generating Seer code, verify your output against these strict rules:
+When generating Seer IPC code, verify your output against these strict rules:
 
 | Rule | Correct Behavior | Common AI Mistake (DO NOT DO) |
 | :--- | :--- | :--- |
@@ -656,5 +514,3 @@ When generating Seer code, verify your output against these strict rules:
 | **Encoding** | UTF-16LE / Unicode `wchar_t` null-terminated | ❌ Passing UTF-8 strings or raw byte arrays |
 | **Interval** | Throttle calls by >= 200ms | ❌ Firing rapid calls in tight loops without throttling |
 | **x64 Alignment** | `COPYDATASTRUCT` is 24 bytes, `lpData` is at offset 16 | ❌ Placing `lpData` at offset 12 (`A_PtrSize + 4`) in AHK or C FFI |
-| **Plugin CRT** | Compile with `/MD` (Release) or `/MDd` (Debug) | ❌ Using `/MT` static runtime (will crash across DLL boundary) |
-| **Plugin Interface**| Interface IID is `"seer.plugin.interface.preview/3"` | ❌ Using obsolete `/1` or `/2` interface IIDs |

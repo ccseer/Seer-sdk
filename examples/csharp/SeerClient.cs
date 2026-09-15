@@ -19,7 +19,6 @@ namespace SeerExample
 
     /// <summary>
     /// Seer IPC client implementation in pure C# using Win32 API.
-    /// No Qt dependencies required.
     /// </summary>
     public static class SeerClient
     {

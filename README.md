@@ -1,15 +1,12 @@
 # Seer SDK
 
-Official SDK for integrating with [Seer](https://1218.io) and developing custom file preview plugins.
+Official SDK for integrating with [Seer](https://1218.io) via Windows IPC.
 
-## Architecture & Capabilities
+## Overview
 
-The SDK covers two distinct integration scenarios:
+Seer SDK allows third-party file managers, launcher tools, scripts, and desktop applications to seamlessly trigger Seer file previews and control the Seer window via pure Windows API (`<Windows.h>`).
 
-| Feature                | Target Audience                                                                                                          | Requirements                                                  | Supported Languages                                                 |
-| :--------------------- | :----------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :------------------------------------------------------------------ |
-| **1. IPC Integration** | Third-party file managers, launcher tools, scripts, desktop apps triggering Seer file preview or controlling Seer window | **Pure Windows API**<br>(`<Windows.h>`)<br>*(No Qt required)* | **C#**, **Python**, **C++**, **Rust**, **Go**, **PowerShell**, etc. |
-| **2. Preview Plugin**  | Developers building in-process file previewers rendered directly inside Seer                                             | **Qt 6.8**<br>**MSVC 2022**<br>**C++17**                      | **C++** (Qt Plugin DLL)                                             |
+Supported in any language: **C#**, **Python**, **Pure C++**, **Rust**, **Go**, **PowerShell**, **AutoHotkey**, etc.
 
 ---
 
@@ -29,7 +26,7 @@ Ready-to-run examples are available in the [`examples/`](examples/) directory:
 
 - **[C# Example](examples/csharp/SeerClient.cs)**: Full P/Invoke client with preview, hide, version query, and shared memory file path retrieval.
 - **[Python Example](examples/python/seer_ipc.py)**: Pure Python standard library (`ctypes`) implementation without any external package dependencies.
-- **[Pure C++ IPC Example](examples/cpp_ipc/main.cpp)**: Minimal Win32 C++ example using [`seer/ipchelper.h`](seer/ipchelper.h) without Qt.
+- **[Pure C++ IPC Example](examples/cpp_ipc/main.cpp)**: Minimal Win32 C++ example using [`seer/ipchelper.h`](seer/ipchelper.h).
 - **[Rust Example](examples/rust/main.rs)**: Lightweight Rust implementation using raw Win32 FFI.
 - **[Go (Golang) Example](examples/go/main.go)**: Go implementation using standard library `syscall`.
 - **[PowerShell Script](examples/powershell/SeerIpc.ps1)**: Native Windows automation script for triggering preview and querying status.
@@ -41,3 +38,4 @@ Ready-to-run examples are available in the [`examples/`](examples/) directory:
 
 - **Issues**: https://github.com/ccseer/Seer/issues
 - **SDK Repository**: https://github.com/ccseer/Seer-sdk
+- **Preview Plugins**: For developing in-process file preview renderers, see https://github.com/ccseer/Seer-Plugins

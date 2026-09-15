@@ -2,12 +2,11 @@
 #include <string>
 
 // seer/ipchelper.h only depends on <Windows.h> and <string>
-// No Qt dependency required!
 #include "../../seer/ipchelper.h"
 
 int wmain(int argc, wchar_t* argv[])
 {
-    std::wcout << L"=== Seer Pure C++ IPC Demo (No Qt Required) ===" << std::endl;
+    std::wcout << L"=== Seer Pure C++ IPC Demo ===" << std::endl;
 
     HWND seer_hwnd = seer::findSeerWindow();
     if (!seer_hwnd) {
