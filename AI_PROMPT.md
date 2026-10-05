@@ -15,7 +15,7 @@
 
 ## Protocol
 
-- Window class: `L"SeerWindowClass"`.
+- Window class: `L"SeerWindowClass"` (standalone viewer: `L"SeerViewerWindowClass"`).
 - Transport: `SendMessageW(hwnd, WM_COPYDATA, ..., &COPYDATASTRUCT)`, `WM_COPYDATA = 0x004A`.
 - Strings are UTF-16LE; `cbData` is byte length including the trailing NUL: `(wcslen(path) + 1) * sizeof(wchar_t)`.
 - `COPYDATASTRUCT` layout (64-bit): 24 bytes total (`dwData` @ 0, `cbData` @ 8, 4 bytes padding, `lpData` @ 16).
@@ -34,6 +34,8 @@
 | `SEER_GET_CURRENT_FILE` | 5006 | mapping name | Read the current preview path |
 | `SEER_GET_VERSION` | 5007 | none | Version integer, e.g. 40001 = 4.0.1 |
 | `SEER_IS_TRACKING_ENABLED` | 5008 | none | Tracking status |
+| `SEER_INVOKE_W32_STANDALONE` | 5009 | absolute path | Preview in a standalone viewer process (SeerViewer.exe) |
+| `SEER_INVOKE_W32_PIN` | 5010 | absolute path | Preview and pin the window (always on top) |
 
 ## Minimal call pattern
 

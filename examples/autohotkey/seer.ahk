@@ -13,6 +13,8 @@ global SEER_IS_VISIBLE     := 5004
 global SEER_HIDE           := 5005
 global SEER_GET_VERSION    := 5007
 global SEER_IS_TRACKING    := 5008
+global SEER_INVOKE_W32_STANDALONE := 5009
+global SEER_INVOKE_W32_PIN        := 5010
 
 ; Find Seer window handle
 SeerFindWindow() {
@@ -74,6 +76,16 @@ SeerPreview(filePath) {
 ; Trigger preview in separated window
 SeerPreviewSeparated(filePath) {
     return SeerSendPath(SEER_INVOKE_W32_SEP, filePath)
+}
+
+; Trigger preview in standalone viewer process
+SeerPreviewStandalone(filePath) {
+    return SeerSendPath(SEER_INVOKE_W32_STANDALONE, filePath)
+}
+
+; Trigger preview and pin window
+SeerPreviewPinned(filePath) {
+    return SeerSendPath(SEER_INVOKE_W32_PIN, filePath)
 }
 
 ; Hide preview window

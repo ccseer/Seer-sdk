@@ -19,6 +19,8 @@ const (
 	SeerGetCurrentFile  = 5006
 	SeerGetVersion      = 5007
 	SeerIsTracking      = 5008
+	SeerInvokeW32Standalone = 5009
+	SeerInvokeW32Pin        = 5010
 )
 
 type CopyDataStruct struct {
@@ -100,6 +102,14 @@ func PreviewFile(filePath string) bool {
 
 func PreviewFileSeparated(filePath string) bool {
 	return sendPathCommand(SeerInvokeW32Sep, filePath)
+}
+
+func PreviewFileStandalone(filePath string) bool {
+	return sendPathCommand(SeerInvokeW32Standalone, filePath)
+}
+
+func PreviewFilePinned(filePath string) bool {
+	return sendPathCommand(SeerInvokeW32Pin, filePath)
 }
 
 func HidePreview() {

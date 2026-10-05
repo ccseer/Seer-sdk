@@ -15,6 +15,8 @@ const SEER_IS_VISIBLE: usize = 5004;
 const SEER_HIDE: usize = 5005;
 const SEER_GET_VERSION: usize = 5007;
 const SEER_IS_TRACKING: usize = 5008;
+const SEER_INVOKE_W32_STANDALONE: usize = 5009;
+const SEER_INVOKE_W32_PIN: usize = 5010;
 
 type HWND = *mut std::ffi::c_void;
 type LPARAM = isize;
@@ -92,6 +94,14 @@ impl SeerClient {
 
     pub fn preview_separated(path: &str) -> bool {
         Self::send_path_command(SEER_INVOKE_W32_SEP, path)
+    }
+
+    pub fn preview_standalone(path: &str) -> bool {
+        Self::send_path_command(SEER_INVOKE_W32_STANDALONE, path)
+    }
+
+    pub fn preview_pinned(path: &str) -> bool {
+        Self::send_path_command(SEER_INVOKE_W32_PIN, path)
     }
 
     pub fn hide() {

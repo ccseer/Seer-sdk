@@ -12,6 +12,8 @@
 param (
     [string]$Preview = "",
     [string]$PreviewSeparated = "",
+    [string]$PreviewStandalone = "",
+    [string]$PreviewPinned = "",
     [switch]$Hide,
     [switch]$Status,
     [switch]$GetVersion
@@ -110,6 +112,16 @@ elseif ($PreviewSeparated) {
     Write-Host "[*] Previewing (separated): $fullPath"
     [SeerWin32]::SendPath(5001, $fullPath) | Out-Null
 }
+elseif ($PreviewStandalone) {
+    $fullPath = Get-FullPathSafely $PreviewStandalone
+    Write-Host "[*] Previewing (standalone): $fullPath"
+    [SeerWin32]::SendPath(5009, $fullPath) | Out-Null
+}
+elseif ($PreviewPinned) {
+    $fullPath = Get-FullPathSafely $PreviewPinned
+    Write-Host "[*] Previewing (pinned): $fullPath"
+    [SeerWin32]::SendPath(5010, $fullPath) | Out-Null
+}
 elseif ($Hide) {
     Write-Host "[*] Hiding Seer preview window..."
     [SeerWin32]::SendSimple(5005) | Out-Null
@@ -133,6 +145,8 @@ else {
     Write-Host "Usage:"
     Write-Host "  .\SeerIpc.ps1 -Preview <file_path>"
     Write-Host "  .\SeerIpc.ps1 -PreviewSeparated <file_path>"
+    Write-Host "  .\SeerIpc.ps1 -PreviewStandalone <file_path>"
+    Write-Host "  .\SeerIpc.ps1 -PreviewPinned <file_path>"
     Write-Host "  .\SeerIpc.ps1 -Hide"
     Write-Host "  .\SeerIpc.ps1 -Status"
 }

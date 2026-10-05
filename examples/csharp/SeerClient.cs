@@ -14,7 +14,9 @@ namespace SeerExample
         Hide = 5005,
         GetCurrentFile = 5006,
         GetVersion = 5007,
-        IsTrackingEnabled = 5008
+        IsTrackingEnabled = 5008,
+        InvokeW32Standalone = 5009,
+        InvokeW32Pinned = 5010
     }
 
     /// <summary>
@@ -130,6 +132,22 @@ namespace SeerExample
         public static bool PreviewFileSeparated(string filePath)
         {
             return SendPathCommand(SeerCommand.InvokeW32Separated, filePath);
+        }
+
+        /// <summary>
+        /// Triggers preview for the specified file in a standalone viewer process (SeerViewer.exe).
+        /// </summary>
+        public static bool PreviewFileStandalone(string filePath)
+        {
+            return SendPathCommand(SeerCommand.InvokeW32Standalone, filePath);
+        }
+
+        /// <summary>
+        /// Triggers preview for the specified file and pins the window (always on top).
+        /// </summary>
+        public static bool PreviewFilePinned(string filePath)
+        {
+            return SendPathCommand(SeerCommand.InvokeW32Pinned, filePath);
         }
 
         /// <summary>

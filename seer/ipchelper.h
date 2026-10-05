@@ -92,6 +92,18 @@ inline bool invokePreviewSeparated(HWND seer_hwnd, const std::wstring &path)
     return sendPathCommand(seer_hwnd, SEER_INVOKE_W32_SEP, path);
 }
 
+// Request a preview in a standalone viewer process (SeerViewer.exe)
+inline bool invokePreviewStandalone(HWND seer_hwnd, const std::wstring &path)
+{
+    return sendPathCommand(seer_hwnd, SEER_INVOKE_W32_STANDALONE, path);
+}
+
+// Request a preview and pin the window (always on top)
+inline bool invokePreviewPinned(HWND seer_hwnd, const std::wstring &path)
+{
+    return sendPathCommand(seer_hwnd, SEER_INVOKE_W32_PIN, path);
+}
+
 // Query if tracking is enabled
 inline bool requestTrackingStatus(HWND seer_hwnd)
 {

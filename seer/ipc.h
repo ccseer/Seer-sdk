@@ -1,6 +1,7 @@
 #pragma once
 
 #define SEER_CLASS_NAME L"SeerWindowClass"
+#define SEER_VIEWER_CLASS_NAME L"SeerViewerWindowClass"
 
 enum SeerCommand : int {
     // Request the file path (sent from Seer)
@@ -27,6 +28,11 @@ enum SeerCommand : int {
     SEER_GET_VERSION = 5007,
     // Query whether tracking mode is enabled
     SEER_IS_TRACKING_ENABLED = 5008,
+
+    // Request a preview in a standalone viewer process (SeerViewer.exe)
+    SEER_INVOKE_W32_STANDALONE = 5009,
+    // Request a preview and pin the window (always on top)
+    SEER_INVOKE_W32_PIN = 5010,
 };
 
 // SEER_IS_VISIBLE

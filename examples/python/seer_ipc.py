@@ -24,6 +24,8 @@ class SeerCommand(IntEnum):
     GET_CURRENT_FILE = 5006
     GET_VERSION = 5007
     IS_TRACKING_ENABLED = 5008
+    INVOKE_W32_STANDALONE = 5009
+    INVOKE_W32_PIN = 5010
 
 
 class COPYDATASTRUCT(ctypes.Structure):
@@ -140,6 +142,16 @@ def preview_file(path: str) -> bool:
 def preview_file_separated(path: str) -> bool:
     """Invokes Seer preview in a separate window for the given file path."""
     return send_path_command(SeerCommand.INVOKE_W32_SEP, path)
+
+
+def preview_file_standalone(path: str) -> bool:
+    """Invokes Seer preview in a standalone viewer process (SeerViewer.exe)."""
+    return send_path_command(SeerCommand.INVOKE_W32_STANDALONE, path)
+
+
+def preview_file_pinned(path: str) -> bool:
+    """Invokes Seer preview and pins the window (always on top)."""
+    return send_path_command(SeerCommand.INVOKE_W32_PIN, path)
 
 
 def hide_preview() -> None:
