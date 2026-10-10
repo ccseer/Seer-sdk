@@ -66,6 +66,7 @@ public:
     virtual void loadFileInfo() {}
     virtual void onCopyTriggered() {}
     virtual void updateDPR(qreal /*dpr*/) {}
+    // 0 = light, 1 = dark
     virtual void updateTheme(int /*theme*/) {}
 
     Q_SIGNAL void sigCommand(int view_command_type, const QVariant &data = {});
