@@ -50,14 +50,3 @@ enum SeerCommand : int {
 
 // SEER_IS_VISIBLE
 enum SeerVisibility : unsigned char { VISIBLE_FALSE = 0, VISIBLE_TRUE = 1 };
-
-//////////////////////////////////////////
-// Legacy only: used by older Seer versions; newer Seer versions no longer read explorer JSON files.
-// json file
-// file should be located at  %USERPROFILE%/Documents/Seer/explorers/
-#define SEER_EXPLORER_FOLDER "explorers"
-// required key
-#define SEER_JSON_KEY_CLASSNAME "classname"
-// optional
-#define SEER_JSON_KEY_WINDOWTEXT "windowtext"
-#define SEER_JSON_KEY_APPNAME "appname"

@@ -1,5 +1,9 @@
 #pragma once
 
+// Deprecated legacy WM_COPYDATA (5000-5010) helpers kept for backward compatibility
+// with examples/deprecated/. Prefer the Named Pipe JSON-RPC protocol or dynamic
+// 4002/4003 explorer registration for new integrations.
+
 #include <Windows.h>
 
 #include <string>

@@ -1,260 +1,281 @@
+// Requires .NET Core 3.0+ / .NET 5+ (uses System.Text.Json).
 using System;
-using System.IO.MemoryMappedFiles;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 
 namespace SeerExample
 {
-    public enum SeerCommand : int
-    {
-        RequestPath = 4000,
-        ResponsePath = 4001,
-        InvokeW32 = 5000,
-        InvokeW32Separated = 5001,
-        IsVisible = 5004,
-        Hide = 5005,
-        GetCurrentFile = 5006,
-        GetVersion = 5007,
-        IsTrackingEnabled = 5008,
-        InvokeW32Standalone = 5009,
-        InvokeW32Pinned = 5010
-    }
-
     /// <summary>
-    /// Seer IPC client implementation in pure C# using Win32 API.
+    /// Seer Named Pipe JSON-RPC 2.0 client in C#.
+    /// Connects to \\.\pipe\Seer.IPC.v2.<SessionId> with 0x0012018B and Identification SQOS,
+    /// verifies server session ID and owner SID, and executes synchronous JSON-RPC calls.
+    ///
+    /// For event subscriptions (seer.events.subscribe), open with FILE_FLAG_OVERLAPPED and
+    /// read on a dedicated background thread so ReadFile does not block WriteFile.
     /// </summary>
-    public static class SeerClient
+    public sealed class SeerClient : IDisposable
     {
-        public const string WindowClassName = "SeerWindowClass";
-        private const int WM_COPYDATA = 0x004A;
+        private const string PipePrefix = @"\\.\pipe\Seer.IPC.v2.";
+        private const int MaxFrameBytes = 64 * 1024;
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct COPYDATASTRUCT
-        {
-            public IntPtr dwData;
-            public int cbData;
-            public IntPtr lpData;
-        }
+        // Server DACL omits FILE_CREATE_PIPE_INSTANCE (0x4), so GENERIC_WRITE fails.
+        private const uint DesiredAccess = 0x0012018B;
+        private const uint OpenExisting = 3;
+        private const uint SecuritySqosPresent = 0x00100000;
+        private const uint SecurityIdentification = 0x00010000;
+        private const uint PipeReadModeMessage = 0x00000002;
+        private const uint ErrorMoreData = 234;
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+        private const int SeKernelObject = 6;
+        private const uint OwnerSecurityInformation = 0x00000001;
+        private const uint TokenQuery = 0x0008;
+        private const int TokenUser = 1;
+        private const int WinLocalSystemSid = 22;
+        private const int WinBuiltinAdministratorsSid = 26;
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
+        private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+        private IntPtr _pipe = InvalidHandleValue;
+        private int _nextId = 1;
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         private static extern uint GetCurrentProcessId();
 
         [DllImport("kernel32.dll")]
-        private static extern ulong GetTickCount64();
+        private static extern IntPtr GetCurrentProcess();
 
-        /// <summary>
-        /// Finds the running Seer main window handle.
-        /// </summary>
-        public static IntPtr FindSeerWindow()
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ProcessIdToSessionId(uint dwProcessId, out uint pSessionId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetNamedPipeServerSessionId(IntPtr pipe, out uint serverSessionId);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr CreateFileW(
+            string lpFileName, uint dwDesiredAccess, uint dwShareMode,
+            IntPtr lpSecurityAttributes, uint dwCreationDisposition,
+            uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetNamedPipeHandleState(
+            IntPtr hNamedPipe, ref uint lpMode, IntPtr lpMaxCollectionCount, IntPtr lpCollectDataTimeout);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool WriteFile(
+            IntPtr hFile, byte[] lpBuffer, uint nNumberOfBytesToWrite, out uint lpNumberOfBytesWritten, IntPtr lpOverlapped);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ReadFile(
+            IntPtr hFile, byte[] lpBuffer, uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr LocalFree(IntPtr hMem);
+
+        [DllImport("advapi32.dll")]
+        private static extern uint GetSecurityInfo(
+            IntPtr handle, int objectType, uint securityInfo,
+            out IntPtr ppsidOwner, IntPtr ppsidGroup, IntPtr ppDacl, IntPtr ppSacl, out IntPtr ppSecurityDescriptor);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool GetTokenInformation(
+            IntPtr tokenHandle, int tokenInformationClass, IntPtr tokenInformation, uint tokenInformationLength, out uint returnLength);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool CreateWellKnownSid(
+            int wellKnownSidType, IntPtr domainSid, byte[] pSid, ref uint cbSid);
+
+        [DllImport("advapi32.dll")]
+        private static extern bool EqualSid(IntPtr pSid1, IntPtr pSid2);
+
+        [DllImport("advapi32.dll")]
+        private static extern bool EqualSid(IntPtr pSid1, byte[] pSid2);
+
+        public static SeerClient Connect(string? pipeNameOverride = null)
         {
-            return FindWindow(WindowClassName, null);
-        }
-
-        /// <summary>
-        /// Checks if Seer is currently running.
-        /// </summary>
-        public static bool IsRunning()
-        {
-            return FindSeerWindow() != IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// Sends a command with no payload.
-        /// </summary>
-        public static IntPtr SendSimpleCommand(SeerCommand command)
-        {
-            IntPtr hwnd = FindSeerWindow();
-            if (hwnd == IntPtr.Zero) return IntPtr.Zero;
-
-            COPYDATASTRUCT cds = new COPYDATASTRUCT
+            if (!ProcessIdToSessionId(GetCurrentProcessId(), out uint sessionId))
             {
-                dwData = (IntPtr)(int)command,
-                cbData = 0,
-                lpData = IntPtr.Zero
-            };
-            return SendMessage(hwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
-        }
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
 
-        /// <summary>
-        /// Sends a command with a string payload (Unicode / UTF-16).
-        /// </summary>
-        public static bool SendPathCommand(SeerCommand command, string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
+            string pipeName = string.IsNullOrEmpty(pipeNameOverride)
+                ? $"{PipePrefix}{sessionId}"
+                : pipeNameOverride;
 
-            IntPtr hwnd = FindSeerWindow();
-            if (hwnd == IntPtr.Zero) return false;
+            IntPtr handle = CreateFileW(pipeName, DesiredAccess, 0, IntPtr.Zero, OpenExisting,
+                                        SecuritySqosPresent | SecurityIdentification, IntPtr.Zero);
+            if (handle == InvalidHandleValue || handle == IntPtr.Zero)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
 
-            string fullPath;
             try
             {
-                fullPath = System.IO.Path.GetFullPath(path);
+                VerifyPipeServer(handle, sessionId);
+                uint mode = PipeReadModeMessage;
+                if (!SetNamedPipeHandleState(handle, ref mode, IntPtr.Zero, IntPtr.Zero))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+                return new SeerClient(handle);
             }
             catch
             {
-                fullPath = path;
+                CloseHandle(handle);
+                throw;
+            }
+        }
+
+        private SeerClient(IntPtr pipe) => _pipe = pipe;
+
+        public void Dispose()
+        {
+            if (_pipe != InvalidHandleValue && _pipe != IntPtr.Zero)
+            {
+                CloseHandle(_pipe);
+                _pipe = InvalidHandleValue;
+            }
+        }
+
+        private static void VerifyPipeServer(IntPtr handle, uint expectedSessionId)
+        {
+            if (!GetNamedPipeServerSessionId(handle, out uint serverSessionId))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+            if (serverSessionId != expectedSessionId)
+            {
+                throw new InvalidOperationException($"Pipe server session mismatch: {serverSessionId} != {expectedSessionId}");
             }
 
-            IntPtr ptrString = Marshal.StringToHGlobalUni(fullPath);
+            uint secErr = GetSecurityInfo(handle, SeKernelObject, OwnerSecurityInformation,
+                                          out IntPtr ownerSid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out IntPtr sd);
+            if (secErr != 0)
+            {
+                throw new Win32Exception((int)secErr);
+            }
+
+            IntPtr token = IntPtr.Zero;
+            IntPtr tokenBuf = IntPtr.Zero;
             try
             {
-                COPYDATASTRUCT cds = new COPYDATASTRUCT
+                if (!OpenProcessToken(GetCurrentProcess(), TokenQuery, out token))
                 {
-                    dwData = (IntPtr)(int)command,
-                    cbData = (fullPath.Length + 1) * sizeof(char),
-                    lpData = ptrString
-                };
-                return SendMessage(hwnd, WM_COPYDATA, IntPtr.Zero, ref cds) != IntPtr.Zero;
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+                GetTokenInformation(token, TokenUser, IntPtr.Zero, 0, out uint needed);
+                tokenBuf = Marshal.AllocHGlobal((int)needed);
+                if (!GetTokenInformation(token, TokenUser, tokenBuf, needed, out needed))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+                IntPtr userSid = Marshal.ReadIntPtr(tokenBuf);
+
+                byte[] adminSid = new byte[68];
+                uint adminLen = (uint)adminSid.Length;
+                if (!CreateWellKnownSid(WinBuiltinAdministratorsSid, IntPtr.Zero, adminSid, ref adminLen))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+
+                byte[] systemSid = new byte[68];
+                uint systemLen = (uint)systemSid.Length;
+                if (!CreateWellKnownSid(WinLocalSystemSid, IntPtr.Zero, systemSid, ref systemLen))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+
+                if (!EqualSid(ownerSid, userSid) && !EqualSid(ownerSid, adminSid) && !EqualSid(ownerSid, systemSid))
+                {
+                    throw new UnauthorizedAccessException("Untrusted pipe server owner SID.");
+                }
             }
             finally
             {
-                Marshal.FreeHGlobal(ptrString);
+                if (tokenBuf != IntPtr.Zero) Marshal.FreeHGlobal(tokenBuf);
+                if (token != IntPtr.Zero) CloseHandle(token);
+                if (sd != IntPtr.Zero) LocalFree(sd);
             }
         }
 
-        /// <summary>
-        /// Triggers preview for the specified file.
-        /// Note: The interval between invocations should be at least 200ms.
-        /// </summary>
-        public static bool PreviewFile(string filePath)
+        public JsonDocument Call(string method, Dictionary<string, object?>? @params = null)
         {
-            return SendPathCommand(SeerCommand.InvokeW32, filePath);
-        }
-
-        /// <summary>
-        /// Triggers preview for the specified file in a separated (standalone) window.
-        /// </summary>
-        public static bool PreviewFileSeparated(string filePath)
-        {
-            return SendPathCommand(SeerCommand.InvokeW32Separated, filePath);
-        }
-
-        /// <summary>
-        /// Triggers preview for the specified file in a standalone viewer process (SeerViewer.exe).
-        /// </summary>
-        public static bool PreviewFileStandalone(string filePath)
-        {
-            return SendPathCommand(SeerCommand.InvokeW32Standalone, filePath);
-        }
-
-        /// <summary>
-        /// Triggers preview for the specified file and pins the window (always on top).
-        /// </summary>
-        public static bool PreviewFilePinned(string filePath)
-        {
-            return SendPathCommand(SeerCommand.InvokeW32Pinned, filePath);
-        }
-
-        /// <summary>
-        /// Hides the Seer main window if currently visible.
-        /// </summary>
-        public static void Hide()
-        {
-            SendSimpleCommand(SeerCommand.Hide);
-        }
-
-        /// <summary>
-        /// Checks if Seer main window is visible.
-        /// </summary>
-        public static bool IsVisible()
-        {
-            return SendSimpleCommand(SeerCommand.IsVisible) != IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// Queries whether file tracking mode is enabled in Seer.
-        /// </summary>
-        public static bool IsTrackingEnabled()
-        {
-            return SendSimpleCommand(SeerCommand.IsTrackingEnabled) != IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// Requests the Seer version integer (e.g., 40001 -> 4.0.1).
-        /// </summary>
-        public static int GetVersion()
-        {
-            return (int)SendSimpleCommand(SeerCommand.GetVersion);
-        }
-
-        /// <summary>
-        /// Requests the file path currently previewed in Seer via shared memory.
-        /// </summary>
-        public static string? GetCurrentFile()
-        {
-            IntPtr hwnd = FindSeerWindow();
-            if (hwnd == IntPtr.Zero) return null;
-
-            string mapName = $"SeerCurFile_{GetCurrentProcessId()}_{GetTickCount64()}";
-            const int maxPathChars = 260;
-            const int bufBytes = maxPathChars * sizeof(char);
-
-            try
+            var payload = new Dictionary<string, object?>
             {
-                using var mmf = MemoryMappedFile.CreateNew(mapName, bufBytes);
-                using var accessor = mmf.CreateViewAccessor(0, bufBytes);
+                ["jsonrpc"] = "2.0",
+                ["id"] = _nextId++,
+                ["method"] = method,
+                ["params"] = @params ?? new Dictionary<string, object?>()
+            };
 
-                // Initialize first wchar to 0
-                accessor.Write(0, '\0');
+            byte[] frame = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload) + "\n");
+            if (!WriteFile(_pipe, frame, (uint)frame.Length, out uint written, IntPtr.Zero) || written != frame.Length)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
 
-                IntPtr ptrMapName = Marshal.StringToHGlobalUni(mapName);
-                try
+            using var ms = new MemoryStream();
+            byte[] buf = new byte[MaxFrameBytes];
+            while (true)
+            {
+                bool ok = ReadFile(_pipe, buf, (uint)buf.Length, out uint read, IntPtr.Zero);
+                if (read > 0)
                 {
-                    COPYDATASTRUCT cds = new COPYDATASTRUCT
+                    ms.Write(buf, 0, (int)read);
+                }
+                if (ok)
+                {
+                    break;
+                }
+                uint err = (uint)Marshal.GetLastWin32Error();
+                if (err == ErrorMoreData)
+                {
+                    if (ms.Length > MaxFrameBytes)
                     {
-                        dwData = (IntPtr)(int)SeerCommand.GetCurrentFile,
-                        cbData = bufBytes,
-                        lpData = ptrMapName
-                    };
-                    SendMessage(hwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
+                        throw new InvalidDataException("Frame exceeds 64 KiB limit.");
+                    }
+                    continue;
+                }
+                throw new Win32Exception((int)err);
+            }
 
-                    char[] buffer = new char[maxPathChars];
-                    accessor.ReadArray(0, buffer, 0, maxPathChars);
-                    int nullIndex = Array.IndexOf(buffer, '\0');
-                    string result = nullIndex >= 0 ? new string(buffer, 0, nullIndex) : new string(buffer);
-                    return string.IsNullOrEmpty(result) ? null : result;
-                }
-                finally
-                {
-                    Marshal.FreeHGlobal(ptrMapName);
-                }
-            }
-            catch
-            {
-                return null;
-            }
+            return JsonDocument.Parse(ms.ToArray());
         }
     }
 
-    internal class Program
+    internal static class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
-            Console.WriteLine("=== Seer C# IPC Demo ===");
-            if (!SeerClient.IsRunning())
-            {
-                Console.WriteLine("Seer is not running! Please start Seer first.");
-                return;
-            }
+            Console.WriteLine("=== Seer C# Named Pipe IPC Demo ===");
+            using var client = SeerClient.Connect();
 
-            int version = SeerClient.GetVersion();
-            Console.WriteLine($"Seer Version: {version}");
-            Console.WriteLine($"Is Visible: {SeerClient.IsVisible()}");
-            Console.WriteLine($"Is Tracking Enabled: {SeerClient.IsTrackingEnabled()}");
+            using var info = client.Call("seer.getInfo");
+            Console.WriteLine($"seer.getInfo: {info.RootElement}");
 
             if (args.Length > 0)
             {
-                string targetFile = args[0];
-                Console.WriteLine($"Invoking preview for: {targetFile}");
-                SeerClient.PreviewFile(targetFile);
+                string absPath = Path.GetFullPath(args[0]);
+                using var openRes = client.Call("seer.preview.open", new Dictionary<string, object?>
+                {
+                    ["path"] = absPath,
+                    ["mode"] = "main",
+                    ["ifAlreadyOpen"] = "noop"
+                });
+                Console.WriteLine($"seer.preview.open: {openRes.RootElement}");
             }
             else
             {
+                using var listRes = client.Call("seer.preview.list");
+                Console.WriteLine($"seer.preview.list: {listRes.RootElement}");
                 Console.WriteLine("Usage: SeerExample.exe <file_path_to_preview>");
             }
         }

@@ -1,4 +1,4 @@
-// Seer V2 Dynamic Explorer Integration Example (Win32 / C++17)
+// Seer Dynamic Explorer Integration Example (Win32 / C++17)
 // Demonstrates:
 //   1. Registering / unregistering a top-level file manager HWND via 4002 / 4003
 //   2. Re-registering automatically on SEER_CORE_READY broadcasts
@@ -27,10 +27,9 @@ std::wstring GetCurrentSelectedFilePath()
     return (len > 0 && len < MAX_PATH) ? std::wstring(selfPath, len) : std::wstring();
 }
 
-// 1. Register top-level HWND dynamically after initialization.
-//    Returns false when rejected, Seer is not running, Seer is pre-V2, or Seer
-//    has not yet finished delayInit(). Check SEER_GET_VERSION (5007) + wait for
-//    SEER_CORE_READY if you need to distinguish startup race from pre-V2 Seer.
+// Register top-level HWND dynamically after initialization.
+// Returns false when rejected, Seer is not running, or Seer has not yet finished delayInit().
+// Probe SEER_GET_VERSION (5007) and wait for SEER_CORE_READY if you need to handle startup races.
 bool RegisterToSeer(HWND myTopHwnd)
 {
     HWND seerHwnd = FindWindowW(SEER_CLASS_NAME, nullptr);
@@ -118,7 +117,7 @@ int wmain(int argc, wchar_t* argv[])
     g_msgSeerReady = RegisterWindowMessageW(SEER_CORE_READY_MSG);
 
     const HINSTANCE hInst = GetModuleHandleW(nullptr);
-    constexpr wchar_t kClassName[] = L"SeerSdkV2ExplorerSampleWnd";
+    constexpr wchar_t kClassName[] = L"SeerSdkExplorerSampleWnd";
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -130,7 +129,7 @@ int wmain(int argc, wchar_t* argv[])
         return 1;
     }
 
-    HWND hwnd = CreateWindowExW(0, kClassName, L"Seer SDK V2 Explorer Sample",
+    HWND hwnd = CreateWindowExW(0, kClassName, L"Seer SDK Explorer Sample",
                                 WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 320, 200,
                                 nullptr, nullptr, hInst, nullptr);
     if (!hwnd) {
