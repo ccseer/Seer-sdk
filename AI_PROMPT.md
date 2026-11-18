@@ -98,15 +98,21 @@ For window-based apps wanting JSON-RPC without opening a pipe:
 
 - **Methods**:
   - `seer.getInfo` (`{}`): Returns `protocolVersion` (`2`), `appVersion`, `versionInt`, `licensed`, `methods`, `events`. Always available even when unlicensed/inactive.
-  - `seer.preview.open` (`{path, mode?, ifAlreadyOpen?}`):
+  - `seer.preview.open` (`{path, mode?, ifAlreadyOpen?, rect?, fullscreen?, focus?, seekMs?, viewer?}`):
     - `mode`: `"main"` (default), `"separated"`, `"pinned"`, `"standalone"`.
     - `ifAlreadyOpen` (only allowed when `mode == "main"`): `"toggle"` (default) or `"noop"`.
+    - `rect` (optional object `{x, y, width, height}`, `main`/`separated`/`pinned` only; rejected in `standalone`): target physical pixel screen geometry (`width >= 1`, `height >= 1`, clamped to minimum window size `510*dpr x 430*dpr` and target screen work area). Disables content-fit auto-resize for that open. Note: on an already-showing matching `main` path, `ifAlreadyOpen: "toggle"` (default) closes the window and discards overrides; pass `ifAlreadyOpen: "noop"` to apply `rect`/other overrides.
+    - `fullscreen` (optional bool): enter/exit fullscreen (supported on all modes, forwarded as `--fullscreen` in `standalone`).
+    - `focus` (optional bool, `main`/`separated`/`pinned` only; rejected in `standalone`): `true` activates and focuses the preview window; `false` suppresses focus-on-open/switch regardless of `ini_preview_focus_mode`.
+    - `seekMs` (optional integer `>= 0`): initial media playback position in milliseconds (supported on all modes, forwarded as `--seek-ms` in `standalone`).
+    - `viewer` (optional non-empty string `<= 128` chars, `main`/`separated`/`pinned` only; rejected in `standalone`): registered enabled viewer type name (e.g. `"Text"`, `"Image"`, `"Media"`, `"PDF"`, `"HTML"`, `"Folder"`, `"Plugin_System"`, `"Plugin_Convert"`, or a registered DLL plugin viewer). Unknown/disabled viewer names return `-32602 Invalid params`.
     - `path`: absolute local path or `file://` URI (also supports special Seer paths if configured).
     - Returns `{sessionId}` (or `{closed: true}` when `"toggle"` closes an already-open matching main window; `{}` for `"standalone"`).
   - `seer.preview.close` (`{sessionId?}`): Closes the main window (default, idempotent `{}`) or a separated/pinned window (`-32003 SESSION_PINNED` if pinned).
   - `seer.preview.getState` (`{sessionId?}`): Returns `{sessionId, visible, pinned, path}` (`path` is `""` when no file is loaded).
   - `seer.preview.list` (`{}`): Returns `{sessions: [{sessionId, visible, pinned, path, isMain}]}`.
   - `seer.window.pin` (`{sessionId?}`): Pins a currently visible window (always on top); returns `-32004 INVALID_STATE` if hidden.
+  - `seer.window.waggle` (`{sessionId?}`): Triggers the horizontal shake/waggle animation on a currently visible window (`{waggled: true}`); returns `-32004 INVALID_STATE` if hidden or `-32002 SESSION_NOT_FOUND` if unknown.
   - `seer.explorer.register` (`{topHwnd, name?}`), `seer.explorer.unregister` (`{topHwnd}`), `seer.explorer.suspend` (`{topHwnd, suspended}`):
     - **`topHwnd` MUST be a JSON integer `uint32` in `[1, 0xFFFFFFFF]`** (e.g. `hwnd_ptr & 0xFFFFFFFF`). Must belong to the calling PID (`-32006 REGISTRATION_REJECTED` otherwise). `name` is optional and at most 128 characters (`-32602` if exceeded). Pipe connections can take over same-PID `4002` Win32 records; distinct pipe connections cannot modify each other's registrations.
   - `seer.events.subscribe` / `seer.events.unsubscribe` (`{events: [...]}`): Pipe-only; returns `{events: [...]}` (the updated sorted list of active subscriptions for this connection).
