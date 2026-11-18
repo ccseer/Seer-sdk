@@ -10,10 +10,10 @@ Supported in any language: **C++**, **Python**, **C#**, **Rust**, **Go**, **Powe
 
 ### Protocol Highlights & Breaking Change Notice
 
-- **Named Pipe JSON-RPC 2.0 (Primary)**: Connect to `\\.\pipe\Seer.IPC.v2.<SessionId>` with explicit access mask `0x0012018B` and `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`, verify server session + owner SID, and exchange newline-delimited UTF-8 JSON-RPC 2.0 frames (or send JSON-RPC over `WM_COPYDATA` `6000` / `6001`).
+- **Named Pipe JSON-RPC 2.0 (Primary)**: Connect to `\\.\pipe\Seer.IPC.v2.<SessionId>` with explicit access mask `0x0012018B` and `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`, verify server session + owner SID, and exchange newline-delimited UTF-8 JSON-RPC 2.0 frames (or send JSON-RPC over `WM_COPYDATA` `6000` / `6001`; C++ helper available in [`seer/ipcv2helper.h`](seer/ipcv2helper.h)).
 - **Dynamic File Manager Registration**: Third-party file managers register their top-level window dynamically via `SEER_REGISTER_EXPLORER` (`4002`) / `SEER_UNREGISTER_EXPLORER` (`4003`) or JSON-RPC `seer.explorer.register`, and re-register when Seer broadcasts `SEER_CORE_READY`.
 - **Breaking Change — Legacy `explorers/*.json` Removed**: Seer no longer scans `%USERPROFILE%/Documents/Seer/explorers/*.json`, and the legacy `SEER_EXPLORER_FOLDER` / `SEER_JSON_KEY_*` macros have been removed from [`seer/ipc.h`](seer/ipc.h).
-- **Backward Compatibility**: Existing integrations calling `4000`/`4001`, `5000`/`5001`, and `5004`-`5010` continue to work unchanged (legacy helper demos are archived under [`examples/deprecated/`](examples/deprecated/)).
+- **Backward Compatibility**: Existing integrations calling `4000`/`4001`, `5000`/`5001`, and `5004`-`5010` remain supported now and going forward (see [`seer/ipclegacyhelper.h`](seer/ipclegacyhelper.h) and [`examples/legacy/`](examples/legacy/)).
 
 ---
 
@@ -39,7 +39,7 @@ Ready-to-run examples are available in the [`examples/`](examples/) directory:
 - **[Go (Golang) Example](examples/go/main.go)**: Pure Go standard library (`syscall` + `encoding/json`) Named Pipe client.
 - **[PowerShell Script](examples/powershell/SeerIpc.ps1)**: Native Windows PowerShell Named Pipe JSON-RPC automation script.
 - **[AutoHotkey (v2) Example (legacy `WM_COPYDATA`)](examples/autohotkey/seer.ahk)**: Hotkey (`Win + Space`) preview automation script (`WM_COPYDATA`).
-- **[Deprecated `WM_COPYDATA` Examples](examples/deprecated/)**: Legacy `5000`–`5010` `WM_COPYDATA` samples preserved for older integrations.
+- **[Legacy `WM_COPYDATA` Examples](examples/legacy/)**: Supported `5000`–`5010` `WM_COPYDATA` samples using [`seer/ipclegacyhelper.h`](seer/ipclegacyhelper.h) for older and lightweight integrations.
 
 ---
 

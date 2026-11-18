@@ -1,8 +1,8 @@
 #include <iostream>
 #include <string>
 
-// seer/ipchelper.h only depends on <Windows.h> and <string>
-#include "../../seer/ipchelper.h"
+// seer/ipclegacyhelper.h only depends on <Windows.h> and <string>
+#include "../../seer/ipclegacyhelper.h"
 
 int wmain(int argc, wchar_t* argv[])
 {

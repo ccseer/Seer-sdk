@@ -123,6 +123,7 @@ int wmain(int argc, wchar_t* argv[])
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = ExplorerWndProc;
     wc.hInstance = hInst;
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = kClassName;
     if (!RegisterClassExW(&wc)) {
         std::wcerr << L"RegisterClassExW failed: " << GetLastError() << std::endl;
@@ -149,6 +150,9 @@ int wmain(int argc, wchar_t* argv[])
         DestroyWindow(hwnd);
         return 0;
     }
+
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
 
     std::wcout << L"Listening for SEER_CORE_READY and SEER_REQUEST_PATH (4000). Close window or Ctrl+C to exit."
                << std::endl;

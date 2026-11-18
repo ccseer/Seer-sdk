@@ -1,6 +1,6 @@
 # Seer SDK IPC: AI Integration Guide
 
-> For AI coding assistants. Use this document together with `seer/ipc.h` as the source of truth when generating or reviewing Seer IPC code. Do not invent protocol details.
+> For AI coding assistants. Use this document together with `seer/ipc.h` (`https://raw.githubusercontent.com/ccseer/Seer-sdk/refs/heads/main/seer/ipc.h`) as the source of truth when generating or reviewing Seer IPC code. If you do not have a local checkout of `Seer-sdk`, all mandatory Win32 constants, access masks, commands, and JSON-RPC schemas needed for basic integration are summarized below, and exact headers/examples are available under `https://raw.githubusercontent.com/ccseer/Seer-sdk/refs/heads/main/`. Do not invent protocol details.
 >
 > This document covers out-of-process IPC (Named Pipe JSON-RPC 2.0, `WM_COPYDATA` `6000/6001` JSON-RPC, Dynamic Explorer `4002/4003` registration, and legacy `WM_COPYDATA` commands). For in-process preview plugins, see [Seer-Plugins](https://github.com/ccseer/Seer-Plugins).
 
@@ -9,8 +9,8 @@
 1. Identify whether the user wants:
    - **Programmatic preview control / queries / event subscriptions (Named Pipe JSON-RPC 2.0 or `6000/6001`)**: `\\.\pipe\Seer.IPC.v2.<SessionId>` or `WM_COPYDATA` `6000/6001`.
    - **File-manager Spacebar integration (Dynamic Explorer)**: `SEER_REGISTER_EXPLORER (4002)` + `SEER_UNREGISTER_EXPLORER (4003)` + `SEER_CORE_READY` + `4000/4001`.
-   - **Legacy / quick hotkey `WM_COPYDATA` commands**: `5000`, `5001`, `5004`-`5010` (`examples/deprecated/` and `examples/autohotkey/seer.ahk`).
-2. Read `seer/ipc.h` and use its exact constants and `SEER_CLASS_NAME`.
+   - **Legacy / quick hotkey `WM_COPYDATA` commands**: `5000`, `5001`, `5004`-`5010` (`examples/legacy/` and `examples/autohotkey/seer.ahk`; see `seer/ipclegacyhelper.h`).
+2. Read `seer/ipc.h` (and `seer/ipcv2helper.h` for C++ v2 pipe/explorer/6000 integration or `seer/ipclegacyhelper.h` for legacy `5000`–`5010`) and use their exact constants and `SEER_CLASS_NAME`.
 3. Never use `%USERPROFILE%/Documents/Seer/explorers/*.json`: Seer no longer reads explorer JSON files.
 4. For preview paths, send canonical absolute Windows paths (`file://` URI accepted by JSON-RPC `seer.preview.open`). For legacy Win32 path commands, send UTF-16LE with NUL terminator and byte-accurate `cbData`.
 5. Handle Seer not running, startup timing (`SEER_CORE_READY`), stale HWNDs, invalid/relative paths, `sessionId` lifetime (`-32002` across restarts), and license/active gates.
@@ -20,12 +20,12 @@
 
 - Window class: `L"SeerWindowClass"` (`SEER_CLASS_NAME`). Standalone viewer is `L"SeerViewerWindowClass"` (`SEER_VIEWER_CLASS_NAME`); standalone viewer returns `FALSE` (`0`) for `4002`, `4003`, and `6000` and never starts the Named Pipe server.
 - Transport: `SendMessageW` / `SendMessageTimeoutW` with `WM_COPYDATA = 0x004A`.
-- `COPYDATASTRUCT` layout (x64): 24 bytes total (`dwData` @ 0, `cbData` @ 8, 4 bytes padding, `lpData` @ 16).
+- `COPYDATASTRUCT` layout: 24 bytes on x64 (`dwData` @ 0, `cbData` @ 8, 4 bytes padding, `lpData` @ 16). In manual FFI/`ctypes`, size `ULONG_PTR`/`PVOID` for the caller's bitness (Windows WOW64 automatically thunks native 32-bit x86 `COPYDATASTRUCT` calls to 64-bit Seer).
 - UTF-16LE string payloads (`4001`, `5000`, `5001`, `5006`, `5009`, `5010`): `cbData` is `(wcslen(s) + 1) * sizeof(wchar_t)`.
 - `SEER_REGISTER_EXPLORER (4002)` / `SEER_UNREGISTER_EXPLORER (4003)` payloads: **fixed 8 bytes** (`ULONGLONG`, low 32 bits of sender's own `topHwnd`, zero-extended in the 8-byte struct; Seer normalizes via `GA_ROOT` and sign-extends bit 31). `wParam` **MUST** be a valid `HWND` (`IsWindow` true) owned by the calling process (typically `myTopHwnd`); passing `0` is always rejected (`FALSE`). Seer checks PID consistency between the target window and `(HWND)wParam` (`GetWindowThreadProcessId` owner) and returns `TRUE` (accepted) or `FALSE` (rejected / invalid `wParam` / not ready / viewer process / older Seer).
 - Consecutive legacy `SEER_INVOKE_*` (`5000`/`5001`/`5009`/`5010`) calls should be spaced by >= 200 ms.
 - Query commands (`5004`, `5007`, `5008`) may legitimately return `0`.
-- Legacy `seer::sendPathCommand` (`seer/ipchelper.h`) only sends data; it does not canonicalize paths or truncate long paths.
+- Legacy `seer::sendPathCommand` (`seer/ipclegacyhelper.h`) only sends data; it does not canonicalize paths or truncate long paths.
 
 | Command | Value | Payload | Direction / Meaning |
 |---|---:|---|---|
@@ -47,10 +47,12 @@
 
 ## File-Manager Spacebar Integration (Dynamic Explorer)
 
+> **Important:** Whether you register your file manager's `topHwnd` via Win32 `SEER_REGISTER_EXPLORER (4002)` **or** via Named Pipe `seer.explorer.register ({topHwnd})`, Seer always queries the selected path over Win32 `WM_COPYDATA (4000 -> 4001)`. Every Spacebar file-manager integration **must** handle `4000 -> 4001` in its top-level `WndProc`.
+
 1. On startup (after creating your top-level window `topHwnd`), find Seer (`FindWindowW(L"SeerWindowClass", nullptr)`).
-2. Probe `SEER_GET_VERSION (5007)` if you need version detection (`>= 40900` for Seer `4.9.0+`; dev builds report `1`), then send `SEER_REGISTER_EXPLORER (4002)` with `SendMessageTimeoutW(..., SMTO_ABORTIFHUNG, 500, &res)`.
+2. Probe `SEER_GET_VERSION (5007)` if you need version detection (`>= 40900` for Seer `4.9.0+`; dev builds report `1`), then register `topHwnd` via `SEER_REGISTER_EXPLORER (4002)` with `SendMessageTimeoutW(..., SMTO_ABORTIFHUNG, 500, &res)` (or via `seer.explorer.register`).
    - **Do NOT use `4002 == FALSE` alone to assume unsupported Seer**: `4002` also returns `FALSE` when Seer is still running `delayInit()` before registering IPC callbacks, or on protocol rejection. If Seer's version supports dynamic registration (`SEER_GET_VERSION`) and `4002` returns `FALSE`, wait for `SEER_CORE_READY` (or retry periodically against `FindWindowW(SEER_CLASS_NAME, nullptr)` if the Named Pipe failed Fail-Closed and `SEER_CORE_READY` was suppressed in Win32-degraded mode) instead of falling back to JSON files.
-3. Listen for `RegisterWindowMessageW(SEER_CORE_READY_MSG)` (`L"SEER_CORE_READY"`) in your window procedure and call `RegisterToSeer(myTopHwnd)` whenever received (handles Seer starting after your app or restarting).
+3. Listen for `RegisterWindowMessageW(SEER_CORE_READY_MSG)` (`L"SEER_CORE_READY"`) in your window procedure and re-register `myTopHwnd` (via `4002`, or by reconnecting the pipe and calling `seer.explorer.register`) whenever received (handles Seer starting after your app or restarting).
 4. Optionally call `SEER_UNREGISTER_EXPLORER (4003)` on shutdown (Seer also prunes destroyed windows lazily).
 5. When Seer sends `WM_COPYDATA` with `dwData == SEER_REQUEST_PATH (4000)`:
    - Reply **synchronously** before returning from `WM_COPYDATA` (Seer waits **150 ms** for `SEER_RESPONSE_PATH = 4001`):
@@ -73,14 +75,15 @@
 ## JSON-RPC 2.0 over Named Pipe (`\\.\pipe\Seer.IPC.v2.<SessionId>`)
 
 - **Pipe name**: `SEER_PIPE_NAME_PREFIX + decimal(SessionId)` (`\\.\pipe\Seer.IPC.v2.<SessionId>`, from `ProcessIdToSessionId`).
-- **Framing**: One single-line UTF-8 JSON-RPC 2.0 object (no BOM) terminated by `\n` (server accepts `\n` or `\r\n`, max frame **64 KiB**, no batch JSON arrays). Always call `SetNamedPipeHandleState(handle, PIPE_READMODE_MESSAGE, nullptr, nullptr)` after `CreateFileW`.
+- **Framing & reading**: One single-line UTF-8 JSON-RPC 2.0 object (no BOM) terminated by `\n` (server accepts `\n` or `\r\n`, max inbound frame **64 KiB**, no batch JSON arrays). Always call `SetNamedPipeHandleState(handle, PIPE_READMODE_MESSAGE, nullptr, nullptr)` after `CreateFileW`. In `PIPE_READMODE_MESSAGE`, `ReadFile` reads one server message per read sequence: if your buffer is smaller than the message, `ReadFile` returns `FALSE` with `ERROR_MORE_DATA` (`234`), so loop `ReadFile` until it returns `TRUE`, then trim trailing `\r\n` and parse the JSON object (if using a byte-stream wrapper without `PIPE_READMODE_MESSAGE`, split frames on `\n`).
+- **Startup & reconnect**: If Seer is not running yet (or restarts and invalidates session IDs with `-32002`), reconnect when `SEER_CORE_READY` is broadcast (or retry connecting to the pipe with backoff; note Seer suppresses `SEER_CORE_READY` if pipe server startup fails Fail-Closed).
 - **Mandatory client access mask & SQOS flags**:
   - Desired access: **`0x0012018B`** (`READ_CONTROL | SYNCHRONIZE | FILE_READ_DATA | FILE_READ_EA | FILE_READ_ATTRIBUTES | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES`, omitting `FILE_APPEND_DATA` / `FILE_CREATE_PIPE_INSTANCE`). Do **NOT** pass `GENERIC_WRITE`: it expands to include `FILE_CREATE_PIPE_INSTANCE` (`0x4`), which the tightened server DACL denies (`ERROR_ACCESS_DENIED`).
   - Flags & attributes: **`SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`** (`0x00100000 | 0x00010000`) to prevent named-pipe impersonation attacks by a rogue squatter.
   - **Fail-closed server verification**: Immediately after opening the handle and before sending any RPC, verify:
     1. `GetNamedPipeServerSessionId(handle, &serverSessionId)` equals your own `SessionId`.
     2. Pipe object owner SID (`GetSecurityInfo(handle, SE_KERNEL_OBJECT, OWNER_SECURITY_INFORMATION, ...)`) equals your token's `TokenUser`, `WinBuiltinAdministratorsSid`, or `WinLocalSystemSid`. If not, close the handle immediately and abort.
-- **Event subscriptions (`seer.events.subscribe`)**: Synchronous `ReadFile` blocks concurrent `WriteFile` on the same handle. Clients that subscribe to asynchronous events **must** open the pipe with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | FILE_FLAG_OVERLAPPED` and run a dedicated reader thread (see also `CancelIoEx`).
+- **Event subscriptions (`seer.events.subscribe`)**: Synchronous `ReadFile` blocks concurrent `WriteFile` on the same handle. Clients that subscribe to asynchronous events **must** open the pipe with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | FILE_FLAG_OVERLAPPED` and run a dedicated reader thread (see also `CancelIoEx`). Once subscribed, both RPC responses (containing `"id"`) and async event notifications (`"method": "seer.event"`, no `"id"`) arrive on the same read stream—route incoming frames by `"id"` vs `"method"` instead of assuming one `ReadFile` equals the reply to your last write.
 - **Connection limits & backpressure**: Up to **4 concurrent connections per PID** and **16 total**; slow readers exceeding 256 queued outbound frames / 256 KiB per connection or 4 MiB globally, or flooding >256 frames / >256 KiB unread inbound RPCs, are disconnected.
 
 ## JSON-RPC 2.0 over `WM_COPYDATA` (`6000` / `6001`)
@@ -96,8 +99,15 @@ For window-based apps wanting JSON-RPC without opening a pipe:
 
 ## Methods, Events, and Error Codes
 
+- **Request / parameter validation rules**:
+  - `"jsonrpc"` must be `"2.0"`; `"params"` (if present) **must** be a JSON object (positional arrays and batch arrays are rejected with `-32600`). No-arg methods accept omitted `"params"` or `{}`.
+  - Every method enforces a **strict key whitelist**: any extra/undocumented key inside `"params"` (or inside `rect`) returns `-32602 Invalid params`.
+  - `rect`: integer coordinates `x, y` in `[-32768, 32768]`, `width, height` in `[1, 32768]`.
+  - When `sessionId?` is omitted on session-targeted `seer.preview.*` / `seer.window.*` methods, Seer targets the main preview session.
 - **Methods**:
-  - `seer.getInfo` (`{}`): Returns `protocolVersion` (`2`), `appVersion`, `versionInt`, `licensed`, `methods`, `events`. Always available even when unlicensed/inactive.
+  - `seer.getInfo` (`{}`): Returns `protocolVersion` (`2`), `appVersion`, `versionInt`, `licensed`, `methods`, `events`. Exempt from `-32009/-32001` gate.
+  - `seer.app.getState` (`{}`): Returns `{licensed, active, tracking, stayOnTop, subWndCount, mainSessionId}`. Exempt from `-32009/-32001` gate so clients can inspect license/active state and `tracking`/`stayOnTop` settings.
+  - `seer.viewers.list` (`{includeDisabled?}`): Returns registered viewers sorted by priority descending: `{viewers: [{name, displayName, priority, internal, disabled, extensions}]}` (by default returns only enabled viewers; exempt from `-32009/-32001` gate).
   - `seer.preview.open` (`{path, mode?, ifAlreadyOpen?, rect?, fullscreen?, focus?, seekMs?, viewer?}`):
     - `mode`: `"main"` (default), `"separated"`, `"pinned"`, `"standalone"`.
     - `ifAlreadyOpen` (only allowed when `mode == "main"`): `"toggle"` (default) or `"noop"`.
@@ -106,18 +116,36 @@ For window-based apps wanting JSON-RPC without opening a pipe:
     - `focus` (optional bool, `main`/`separated`/`pinned` only; rejected in `standalone`): `true` activates and focuses the preview window; `false` suppresses focus-on-open/switch regardless of `ini_preview_focus_mode`.
     - `seekMs` (optional integer `>= 0`): initial media playback position in milliseconds (supported on all modes, forwarded as `--seek-ms` in `standalone`).
     - `viewer` (optional non-empty string `<= 128` chars, `main`/`separated`/`pinned` only; rejected in `standalone`): registered enabled viewer type name. Accepts canonical built-in identities (`"Text"`, `"Image"`, `"Media"`, `"PDF"`, `"HTML"`, `"Folder"`, `"Plugin_System"`, `"Plugin_Convert"`), English display aliases (`"Web"`/`"web"` for `"HTML"`, `"System"`/`"system"` for `"Plugin_System"`, case-insensitive built-ins such as `"text"`/`"pdf"`), or a registered DLL/process plugin viewer ID. Exact registered plugin names take priority over built-in aliases; localized UI strings (e.g. `"网页"`) are not accepted. Unknown or disabled viewers return `-32602 Invalid params`.
-    - `path`: absolute local path or `file://` URI (also supports special Seer paths if configured).
+    - `path`: absolute local path, `file://` URI, or registered virtual scheme (e.g. `seer-archive://`).
     - Returns `{sessionId}` (or `{closed: true}` when `"toggle"` closes an already-open matching main window; `{}` for `"standalone"`).
   - `seer.preview.close` (`{sessionId?}`): Closes the main window (default, idempotent `{}`) or a separated/pinned window (`-32003 SESSION_PINNED` if pinned).
-  - `seer.preview.getState` (`{sessionId?}`): Returns `{sessionId, visible, pinned, path}` (`path` is `""` when no file is loaded).
-  - `seer.preview.list` (`{}`): Returns `{sessions: [{sessionId, visible, pinned, path, isMain}]}`.
+  - `seer.preview.getState` (`{sessionId?}`): Returns `{sessionId, visible, pinned, path, viewerType, availableViewers, rect?, fullscreen, inspectorVisible, loadState, sourcePath}` (`path` is `""` when no file is loaded; `rect` is present only when `visible` is `true`; `loadState` is one of `"idle"`, `"resolving"`, `"loading"`, `"content"`, `"message"`, `"error"`, `"discarded"`).
+  - `seer.preview.list` (`{}`): Returns `{sessions: [{sessionId, visible, pinned, path, isMain, viewerType, availableViewers, rect?, fullscreen, inspectorVisible, loadState, sourcePath}]}`.
+  - `seer.preview.switchViewer` (`{sessionId?, viewer}`): Switches an open preview's viewer in place and returns `{viewer}`. Unknown or disabled `viewer` returns `-32602`; hidden window, unloaded path, or resolving/message/error/discarded state returns `-32004`.
+  - `seer.preview.reload` (`{sessionId?}`): Reloads the current preview (`{reloaded: true}`); returns `-32004` when hidden, unloaded, or not in a reloadable state (e.g. `resolving`/`loading`/`error`).
+  - `seer.preview.separate` (`{sessionId?}`): Creates a separated preview window for the current session's path and returns `{sessionId}`; returns `-32004` if invalid state or `-32008` on creation failure.
+  - `seer.preview.closeAllSub` (`{}`): Closes all visible sub-windows (separated and pinned child windows, excluding main) and returns `{closedCount}`.
+  - `seer.preview.reveal` (`{sessionId?}`): Reveals the current previewed file in Windows Explorer (`{revealed: true}`) while keeping the preview window visibility unchanged; returns `-32008` on failure or `-32004` if invalid state.
+  - `seer.preview.openDefault` (`{sessionId?}`): Opens the current previewed file with its default system application (`{opened: true}`) while keeping preview window visibility unchanged; returns `-32008` on failure or `-32004` if invalid state.
+  - `seer.preview.getProperties` (`{sessionId?}`): Returns `{groups: [...]}` containing the inspector property groups collected for the current preview (`-32004` if hidden/unloaded/blocked state).
+  - `seer.preview.listControls` (`{sessionId?}`): Returns `{sessionId, path, controls: [{id, name, closeAfterSuccess, requiresScreenshot}]}` listing enabled control plugin actions for the current previewed file.
+  - `seer.preview.triggerControl` (`{sessionId?, id}`): Triggers the specified control plugin action (`{triggered: true, id, sessionId}`); if `closeAfterSuccess` is `true`, the host asynchronously hides the window and emits `preview.closed` after launch succeeds; returns `-32004` when unavailable or screenshot capture is blocked.
   - `seer.window.pin` (`{sessionId?}`): Pins a currently visible window (always on top); returns `-32004 INVALID_STATE` if hidden.
   - `seer.window.waggle` (`{sessionId?}`): Triggers the horizontal shake/waggle animation on a currently visible window (`{waggled: true}`); returns `-32004 INVALID_STATE` if hidden or `-32002 SESSION_NOT_FOUND` if unknown.
+  - `seer.window.setBounds` (`{sessionId?, rect}`): Moves/resizes a visible preview window (`rect`: `{x, y, width, height}` physical pixels clamped to work area and min window size; restores maximized state cleanly and does not overwrite persistent `keep` geometry); returns applied `{rect}` or `-32004` if hidden.
+  - `seer.window.setFullscreen` (`{sessionId?, fullscreen}`): Enters or exits fullscreen on a visible preview window and returns `{fullscreen}`; returns `-32004` if hidden.
+  - `seer.window.setInspector` (`{sessionId?, visible}`): Shows or hides the inspector panel and returns `{visible}`. Returns `-32004` if hidden; `visible: true` validates a loaded file and available viewer (`DT_None` / `resolving` / `message` / `error` / `discarded` returns `-32004`); `visible: false` is idempotent on any visible window.
   - `seer.explorer.register` (`{topHwnd, name?}`), `seer.explorer.unregister` (`{topHwnd}`), `seer.explorer.suspend` (`{topHwnd, suspended}`):
     - **`topHwnd` MUST be a JSON integer `uint32` in `[1, 0xFFFFFFFF]`** (e.g. `hwnd_ptr & 0xFFFFFFFF`). Must belong to the calling PID (`-32006 REGISTRATION_REJECTED` otherwise). `name` is optional and at most 128 characters (`-32602` if exceeded). Pipe connections can take over same-PID `4002` Win32 records; distinct pipe connections cannot modify each other's registrations.
-  - `seer.events.subscribe` / `seer.events.unsubscribe` (`{events: [...]}`): Pipe-only; returns `{events: [...]}` (the updated sorted list of active subscriptions for this connection).
-- **Events** (Pipe notifications `{"jsonrpc":"2.0","method":"seer.event","params":{"event":...,"sessionId":..., ...}}`):
-  - `preview.opened`, `preview.fileChanged`, `preview.closed`, `window.pinnedChanged`.
+  - `seer.events.subscribe` / `seer.events.unsubscribe` (`{events: [...]}`): Pipe-only; wildcards (e.g. `"*"`) are **not** supported (all elements must be exact supported event names or `-32602` is returned); returns `{events: [...]}` (the updated sorted list of active subscriptions for this connection).
+- **Events** (Pipe notifications `{"jsonrpc":"2.0","method":"seer.event","params":{"event":..., ...}}`):
+  - `preview.opened` (`{sessionId, path}`)
+  - `preview.fileChanged` (`{sessionId, path}`)
+  - `preview.loadStateChanged` (`{sessionId, state, path}`)
+  - `preview.viewerChanged` (`{sessionId, viewerType}`)
+  - `preview.closed` (`{sessionId}`)
+  - `window.pinnedChanged` (`{sessionId, pinned}`)
+  - `app.stateChanged` (`{licensed, active, tracking, stayOnTop}`)
   - Any synchronous event triggered by an RPC (e.g. `preview.opened` or `preview.closed`) is always queued **after** that RPC's response frame.
 - **Session IDs**: Opaque `<processNonce>-<seq>` strings. Invalidated on Seer restart (`-32002 SESSION_NOT_FOUND`). Do not parse or persist across restarts.
 - **Error codes**:
@@ -126,6 +154,9 @@ For window-based apps wanting JSON-RPC without opening a pipe:
 
 ## References
 
+Raw base URL when working outside a local checkout: `https://raw.githubusercontent.com/ccseer/Seer-sdk/refs/heads/main/`
+
+- C++ Header Helpers: `seer/ipc.h`, `seer/ipcv2helper.h` (IPC v2 Named Pipe / `6000` / `4002`), `seer/ipclegacyhelper.h` (legacy `WM_COPYDATA` `5000`–`5010`)
 - C++ Dynamic Explorer: `examples/cpp_explorer/main.cpp`
 - C++ Named Pipe Client: `examples/cpp_ipc/main.cpp`
 - Python Named Pipe Client: `examples/python/seer_ipc.py` (standard-library `ctypes`)
@@ -134,16 +165,17 @@ For window-based apps wanting JSON-RPC without opening a pipe:
 - Go: `examples/go/main.go`
 - PowerShell: `examples/powershell/SeerIpc.ps1`
 - AutoHotkey (v2, legacy `WM_COPYDATA`): `examples/autohotkey/seer.ahk`
-- Deprecated `WM_COPYDATA` (`5000`–`5010`) demos: `examples/deprecated/`
+- Legacy `WM_COPYDATA` (`5000`–`5010`) demos: `examples/legacy/`
 
 ## Anti-hallucination checklist
 
-- Do **not** generate `%USERPROFILE%/Documents/Seer/explorers/*.json`; use `4002/4003` + `SEER_CORE_READY` or `seer.explorer.register`.
-- For Named Pipe, always use `\\.\pipe\Seer.IPC.v2.<SessionId>`, access `0x0012018B` (not `GENERIC_WRITE`), `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`, `PIPE_READMODE_MESSAGE`, and verify server session ID + owner SID before sending RPCs.
-- For `seer.events.subscribe`, require `FILE_FLAG_OVERLAPPED` + dedicated reader thread.
+- Do **not** generate `%USERPROFILE%/Documents/Seer/explorers/*.json`; use `4002/4003` + `SEER_CORE_READY` or `seer.explorer.register`. If registering a file manager via `seer.explorer.register`, still handle `WM_COPYDATA (4000 -> 4001)` in `WndProc`.
+- For Named Pipe, always use `\\.\pipe\Seer.IPC.v2.<SessionId>`, access `0x0012018B` (not `GENERIC_WRITE`), `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`, `PIPE_READMODE_MESSAGE`, handle `ERROR_MORE_DATA` (`234`) when reading frames, and verify server session ID + owner SID before sending RPCs.
+- For `seer.events.subscribe`, require `FILE_FLAG_OVERLAPPED` + dedicated reader thread, demux `"id"` responses vs `"seer.event"` notifications, and list explicit event names (no `"*"` wildcard).
+- For JSON-RPC requests, always pass `"params"` as an object with no extra/invented keys (strict whitelist validation).
 - For `6000`, never broadcast, never use `SMTO_BLOCK`, and always send from the thread owning the `wParam` reply HWND.
 - Always pass `topHwnd` as a JSON `uint32` in `[1, 0xFFFFFFFF]`.
-- Keep existing `SEER_CLASS_NAME` (`SeerWindowClass`) and `COPYDATASTRUCT` x64 layout (24 bytes, `lpData` @ offset 16).
+- Keep existing `SEER_CLASS_NAME` (`SeerWindowClass`) and target-bitness `COPYDATASTRUCT` layout (24 bytes on x64, `lpData` @ offset 16).
 - Space legacy `SEER_INVOKE_*` calls by `>= 200 ms`; prefer `seer.preview.getState` (`path`) for new integrations — only if implementing legacy `SEER_GET_CURRENT_FILE (5006)`, match mapping name `^SeerCurFile_[0-9]+_[0-9]+$`, pass `cbData == buffer bytes` (min `MAX_PATH * sizeof(wchar_t)`), NUL-init first `wchar_t`, and always call `UnmapViewOfFile` + `CloseHandle`.
 
 ## Troubleshooting
@@ -152,8 +184,9 @@ For window-based apps wanting JSON-RPC without opening a pipe:
 |---|---|
 | `4002` returns `FALSE` | `wParam` is `0` or invalid HWND, Seer still starting (wait for `SEER_CORE_READY`), PID mismatch on `topHwnd`/`wParam`, hit `SeerViewerWindowClass`, or older Seer |
 | Pipe `CreateFileW` access denied (5) | Used `GENERIC_WRITE` instead of `0x0012018B` |
+| Pipe `CreateFileW` not found (`2`) | Seer not running, still finishing `delayInit()`, or Named Pipe server disabled in Settings (`WM_COPYDATA` `6000` still works) |
 | `REGISTRATION_REJECTED` (`-32006`) | `topHwnd` belongs to another PID or another pipe connection, or `topHwnd` invalid |
-| `LICENSE_EXPIRED` (`-32009`) | Seer trial/license expired (activate license; `getInfo` and `explorer.*` still work) |
+| `LICENSE_EXPIRED` (`-32009`) | Seer trial/license expired (activate license; `getInfo`, `app.getState`, `viewers.list`, and `explorer.*` still work) |
 | `6001` response never arrives | Sent `6000` with `SMTO_BLOCK`, invalid `wParam`, or sent from a thread other than `wParam`'s thread |
 | Pipe hangs on `WriteFile` when subscribed | Missing `FILE_FLAG_OVERLAPPED` + dedicated reader thread |
 | `-32002 SESSION_NOT_FOUND` | Window was closed or Seer restarted (refresh via `seer.preview.list`) |
