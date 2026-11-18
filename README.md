@@ -21,7 +21,7 @@ Supported in any language: **C++**, **Python**, **C#**, **Rust**, **Go**, **Powe
 
 Working with AI assistants (ChatGPT, Claude, Gemini, Cursor, Copilot)?
 
-👉 Simply provide this URL or file to your AI: **[AI_PROMPT.md](AI_PROMPT.md)**
+👉 Simply provide this URL or file to your AI: **[IPC_PROMPT.md](IPC_PROMPT.md)**
 
 It provides protocol specifications, message formats, JSON-RPC methods/events, security requirements, and integration rules so AI can generate accurate Seer IPC code.
 
